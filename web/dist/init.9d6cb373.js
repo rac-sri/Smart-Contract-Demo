@@ -65890,7 +65890,1642 @@ tslib_1.__exportStar(require("./bech32"), exports);
 tslib_1.__exportStar(require("./types"), exports);
 tslib_1.__exportStar(require("./address"), exports);
 
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","hdkey":"../node_modules/hdkey/lib/hdkey.js","bip39":"../node_modules/bip39/index.js","bn.js":"../node_modules/bn.js/lib/bn.js","./random":"../node_modules/@harmony-js/crypto/dist/random.js","./keyTool":"../node_modules/@harmony-js/crypto/dist/keyTool.js","./keystore":"../node_modules/@harmony-js/crypto/dist/keystore.js","./bytes":"../node_modules/@harmony-js/crypto/dist/bytes.js","./rlp":"../node_modules/@harmony-js/crypto/dist/rlp.js","./keccak256":"../node_modules/@harmony-js/crypto/dist/keccak256.js","./errors":"../node_modules/@harmony-js/crypto/dist/errors.js","./bech32":"../node_modules/@harmony-js/crypto/dist/bech32.js","./types":"../node_modules/@harmony-js/crypto/dist/types.js","./address":"../node_modules/@harmony-js/crypto/dist/address.js"}],"../node_modules/mitt/dist/mitt.es.js":[function(require,module,exports) {
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","hdkey":"../node_modules/hdkey/lib/hdkey.js","bip39":"../node_modules/bip39/index.js","bn.js":"../node_modules/bn.js/lib/bn.js","./random":"../node_modules/@harmony-js/crypto/dist/random.js","./keyTool":"../node_modules/@harmony-js/crypto/dist/keyTool.js","./keystore":"../node_modules/@harmony-js/crypto/dist/keystore.js","./bytes":"../node_modules/@harmony-js/crypto/dist/bytes.js","./rlp":"../node_modules/@harmony-js/crypto/dist/rlp.js","./keccak256":"../node_modules/@harmony-js/crypto/dist/keccak256.js","./errors":"../node_modules/@harmony-js/crypto/dist/errors.js","./bech32":"../node_modules/@harmony-js/crypto/dist/bech32.js","./types":"../node_modules/@harmony-js/crypto/dist/types.js","./address":"../node_modules/@harmony-js/crypto/dist/address.js"}],"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js":[function(require,module,exports) {
+"use strict";
+/**
+ * ## About this package
+ *
+ * `@harmony-js/contract` makes it easy to interact with smart contract on the Harmony Blockchain. This allows you to interact with smart contracts as if they were JavaScript objects.
+ *
+ * ## How to use this package
+ *
+ * ### Deploy a contract to blockchain
+ * ```javascript
+ * // Step 1: Use Solidity to build a sample contract instance
+ * contract Inbox {
+ *   string public message;
+ *   constructor() public {
+ *     message = "hello";
+ *   }
+ *   function setMessage(string memory newMessage) public {
+ *     message = newMessage;
+ *   }
+ * }
+ *
+ * // Step 2: Use truffle to compile the contract
+ * $ truffle compile
+ *
+ * // Step 3: Use truffle to deploy the contract (by truffle)
+ * $ truffle migrate --network local --reset
+ * $ truffle migrate --network testnet --reset
+ * ```
+ * [Tutorial: using truffle to compile and deploy smart-contract](https://github.com/harmony-one/HRC/tree/master/examples/dapp_Lottery)
+ *
+ * ### Interact with the contract
+ * ```javascript
+ * // Step 1: create a harmony instance
+ * const { Harmony } = require('@harmony-js/core');
+ * const { ChainID, ChainType } = require('@harmony-js/utils');
+ * const hmy = new Harmony(
+ *   // let's assume we deploy smart contract to this end-point URL
+ *   'https://api.s0.b.hmny.io'
+ *   {
+ *     chainType: ChainType.Harmony,
+ *     chainId: ChainID.HmyLocal,
+ *   }
+ * )
+ *
+ * // Step 2: get a contract instance
+ * const getContractInstance = (hmy, artifact) => {
+ *   return hmy.contracts.createContract(artifact.abi, address);
+ * }
+ * const inbox = getContractInstance(hmy, inboxJson)
+ *
+ * // Step 3: interact with the instance
+ * // Example 1: methods.myMethod.call()
+ * const message = await inbox.methods.message().call();
+ * console.log(message);
+ *
+ * // Example 2: methods.myMethod.send()
+ * inbox.methods.setMessage('666').send({
+ *   gasLimit: '1000001',
+ *   gasPrice: new hmy.utils.Unit('10').asGwei().toWei(),
+ * });
+ * ```
+ *
+ * ### Integrate MathWallet
+ * Using MathWallet to sign Transaction
+ * ```javascript
+ * // Step 0: set up MathWallet extension on Chrome
+ *
+ * // Step 1: Create a harmonyExtension instance
+ * const { Harmony, HarmonyExtension } = require('@harmony-js/core');
+ * let hmyEx, ExContract;
+ * export const initExtension = async() => {
+ *   hmyEx = await new HarmonyExtension(window.harmony);
+ *
+ *   exContract = hmyEx.contracts.createContract(abi, address);
+ *   return exContract;
+ * };
+ *
+ * // Step 2: interact with hmyEx instance
+ * // wait for hmy inject into window
+ * async componentDidMount() {
+ *   ...
+ *   await waitForInjected()
+ *   ...
+ * }
+ * // Example: methods.myMethod.send()
+ * onSubmit = async event => {
+ *   const exContract = await initExtension()
+ *   await exContract.methods.Mymethod().send({
+ *     value: new hmy.utils.Unit('1').asOne().toWei(),
+ *   })
+ * }
+ *
+ * // wait for injected
+ * export const waitForInjected = () => new Promise((resolve) => {
+ *   const check = () => {
+ *     if (!window.harmony) setTimeout(check, 250);
+ *     else resolve(window.harmony);
+ *   }
+ *   check();
+ * });
+ * ```
+ *
+ * ## [More Examples: HRC repo](https://github.com/harmony-one/HRC/tree/master/examples)
+ * - Lottery
+ * - HRC 20
+ * - HRC 721
+ * - Node-dao
+ * - Node-faucet
+ *
+ * @packageDocumentation
+ * @module harmony-contract
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.defaultAbiCoder = exports.AbiCoder = exports.deepCopy = exports.shallowCopy = exports.isType = exports.parseBytes32String = exports.formatBytes32String = exports.toUtf8String = exports.toUtf8Bytes = exports.UnicodeNormalizationForm = exports.parseSignature = exports.formatSignature = exports.formatParamType = exports.parseParamType = exports.defaultCoerceFunc = void 0;
+var tslib_1 = require("tslib");
+// this file is mainly ported from `ethers.js`, but done some fixes
+// 1. added bytesPadRight support
+// 2. ts-lint
+// 3. use BN as default Bignumber instance
+var crypto_1 = require("@harmony-js/crypto");
+var utils_1 = require("@harmony-js/utils");
+/** @hidden */
+var NegativeOne = new crypto_1.BN(-1);
+/** @hidden */
+var One = new crypto_1.BN(1);
+/** @hidden */
+var Zero = new crypto_1.BN(0);
+/** @hidden */
+var HashZero = '0x0000000000000000000000000000000000000000000000000000000000000000';
+/** @hidden */
+var MaxUint256 = utils_1.hexToBN('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+///////////////////////////////
+/** @hidden */
+var paramTypeBytes = new RegExp(/^bytes([0-9]*)$/);
+/** @hidden */
+var paramTypeNumber = new RegExp(/^(u?int)([0-9]*)$/);
+/** @hidden */
+var paramTypeArray = new RegExp(/^(.*)\[([0-9]*)\]$/);
+/** @hidden */
+exports.defaultCoerceFunc = function (type, value) {
+    var match = type.match(paramTypeNumber);
+    if (match && parseInt(match[2], 10) <= 48) {
+        // return value.toNumber();
+        return value.toString('hex');
+    }
+    return value;
+};
+///////////////////////////////////
+// Parsing for Solidity Signatures
+///////////////////////////////////
+// Parsing for Solidity Signatures
+/** @hidden */
+var regexParen = new RegExp('^([^)(]*)\\((.*)\\)([^)(]*)$');
+/** @hidden */
+var regexIdentifier = new RegExp('^[A-Za-z_][A-Za-z0-9_]*$');
+/** @hidden */
+function verifyType(type) {
+    // These need to be transformed to their full description
+    if (type.match(/^uint($|[^1-9])/)) {
+        type = 'uint256' + type.substring(4);
+    }
+    else if (type.match(/^int($|[^1-9])/)) {
+        type = 'int256' + type.substring(3);
+    }
+    return type;
+}
+/** @hidden */
+function parseParam(param, allowIndexed) {
+    var originalParam = param;
+    // tslint:disable-next-line: no-shadowed-variable
+    function throwError(i) {
+        throw new Error('unexpected character "' +
+            originalParam[i] +
+            '" at position ' +
+            i +
+            ' in "' +
+            originalParam +
+            '"');
+    }
+    param = param.replace(/\s/g, ' ');
+    var parent = { type: '', name: '', state: { allowType: true } };
+    var node = parent;
+    for (var i = 0; i < param.length; i++) {
+        var c = param[i];
+        switch (c) {
+            case '(':
+                if (!node.state || !node.state.allowParams) {
+                    throwError(i);
+                }
+                if (node.state) {
+                    node.state.allowType = false;
+                }
+                if (node.type) {
+                    node.type = verifyType(node.type);
+                }
+                node.components = [{ type: '', name: '', parent: node, state: { allowType: true } }];
+                node = node.components[0];
+                break;
+            case ')':
+                delete node.state;
+                if (allowIndexed && node.name === 'indexed') {
+                    node.indexed = true;
+                    node.name = '';
+                }
+                if (node.type) {
+                    node.type = verifyType(node.type);
+                }
+                var child = node;
+                node = node.parent;
+                if (!node) {
+                    throwError(i);
+                }
+                delete child.parent;
+                if (node.state) {
+                    node.state.allowParams = false;
+                    node.state.allowName = true;
+                    node.state.allowArray = true;
+                }
+                break;
+            case ',':
+                delete node.state;
+                if (allowIndexed && node.name === 'indexed') {
+                    node.indexed = true;
+                    node.name = '';
+                }
+                if (node.type) {
+                    node.type = verifyType(node.type);
+                }
+                var sibling = {
+                    type: '',
+                    name: '',
+                    parent: node.parent,
+                    state: { allowType: true },
+                };
+                node.parent.components.push(sibling);
+                delete node.parent;
+                node = sibling;
+                break;
+            // Hit a space...
+            case ' ':
+                // If reading type, the type is done and may read a param or name
+                if (node.state) {
+                    if (node.state.allowType) {
+                        if (node.type !== '' && node.type) {
+                            node.type = verifyType(node.type);
+                            delete node.state.allowType;
+                            node.state.allowName = true;
+                            node.state.allowParams = true;
+                        }
+                    }
+                    // If reading name, the name is done
+                    if (node.state.allowName) {
+                        if (node.name !== '') {
+                            if (allowIndexed && node.name === 'indexed') {
+                                node.indexed = true;
+                                node.name = '';
+                            }
+                            else {
+                                node.state.allowName = false;
+                            }
+                        }
+                    }
+                }
+                break;
+            case '[':
+                if (!node.state || !node.state.allowArray) {
+                    throwError(i);
+                }
+                if (node.state) {
+                    node.type += c;
+                    node.state.allowArray = false;
+                    node.state.allowName = false;
+                    node.state.readArray = true;
+                }
+                break;
+            case ']':
+                if (!node.state || !node.state.readArray) {
+                    throwError(i);
+                }
+                if (node.state) {
+                    node.type += c;
+                    node.state.readArray = false;
+                    node.state.allowArray = true;
+                    node.state.allowName = true;
+                }
+                break;
+            default:
+                if (node.state) {
+                    if (node.state.allowType) {
+                        node.type += c;
+                        node.state.allowParams = true;
+                        node.state.allowArray = true;
+                    }
+                    else if (node.state.allowName) {
+                        node.name += c;
+                        delete node.state.allowArray;
+                    }
+                    else if (node.state.readArray) {
+                        node.type += c;
+                    }
+                    else {
+                        throwError(i);
+                    }
+                }
+        }
+    }
+    if (node.parent) {
+        throw new Error('unexpected eof');
+    }
+    delete parent.state;
+    if (allowIndexed && node.name === 'indexed') {
+        node.indexed = true;
+        node.name = '';
+    }
+    if (parent.type) {
+        parent.type = verifyType(parent.type);
+    }
+    return parent;
+}
+// @TODO: Better return type
+/** @hidden */
+function parseSignatureEvent(fragment) {
+    var abi = {
+        anonymous: false,
+        inputs: [],
+        name: '',
+        type: 'event',
+    };
+    var match = fragment.match(regexParen);
+    if (!match) {
+        throw new Error('invalid event: ' + fragment);
+    }
+    abi.name = match[1].trim();
+    splitNesting(match[2]).forEach(function (param) {
+        param = parseParam(param, true);
+        param.indexed = !!param.indexed;
+        abi.inputs.push(param);
+    });
+    match[3].split(' ').forEach(function (modifier) {
+        switch (modifier) {
+            case 'anonymous':
+                abi.anonymous = true;
+                break;
+            case '':
+                break;
+            default:
+                crypto_1.info('unknown modifier: ' + modifier);
+        }
+    });
+    if (abi.name && !abi.name.match(regexIdentifier)) {
+        throw new Error('invalid identifier: "' + abi.name + '"');
+    }
+    return abi;
+}
+/** @hidden */
+function parseParamType(type) {
+    return parseParam(type, true);
+}
+exports.parseParamType = parseParamType;
+// @TODO: Allow a second boolean to expose names
+/** @hidden */
+function formatParamType(paramType) {
+    return getParamCoder(exports.defaultCoerceFunc, paramType).type;
+}
+exports.formatParamType = formatParamType;
+/** @hidden */
+function parseSignatureFunction(fragment) {
+    var abi = {
+        constant: false,
+        gas: null,
+        inputs: [],
+        name: '',
+        outputs: [],
+        payable: false,
+        stateMutability: null,
+        type: 'function',
+    };
+    var comps = fragment.split('@');
+    if (comps.length !== 1) {
+        if (comps.length > 2) {
+            throw new Error('invalid signature');
+        }
+        if (!comps[1].match(/^[0-9]+$/)) {
+            throw new Error('invalid signature gas');
+        }
+        abi.gas = new crypto_1.BN(comps[1]);
+        fragment = comps[0];
+    }
+    comps = fragment.split(' returns ');
+    var left = comps[0].match(regexParen);
+    if (!left) {
+        throw new Error('invalid signature');
+    }
+    abi.name = left[1].trim();
+    if (!abi.name.match(regexIdentifier)) {
+        throw new Error('invalid identifier: "' + left[1] + '"');
+    }
+    splitNesting(left[2]).forEach(function (param) {
+        abi.inputs.push(parseParam(param));
+    });
+    left[3].split(' ').forEach(function (modifier) {
+        switch (modifier) {
+            case 'constant':
+                abi.constant = true;
+                break;
+            case 'payable':
+                abi.payable = true;
+                abi.stateMutability = 'payable';
+                break;
+            case 'pure':
+                abi.constant = true;
+                abi.stateMutability = 'pure';
+                break;
+            case 'view':
+                abi.constant = true;
+                abi.stateMutability = 'view';
+                break;
+            case 'external':
+            case 'public':
+            case '':
+                break;
+            default:
+                crypto_1.info('unknown modifier: ' + modifier);
+        }
+    });
+    // We have outputs
+    if (comps.length > 1) {
+        var right = comps[1].match(regexParen);
+        if (right === null || right[1].trim() !== '' || right[3].trim() !== '') {
+            throw new Error('unexpected tokens');
+        }
+        splitNesting(right[2]).forEach(function (param) {
+            abi.outputs.push(parseParam(param));
+        });
+    }
+    if (abi.name === 'constructor') {
+        abi.type = 'constructor';
+        if (abi.outputs.length) {
+            throw new Error('constructor may not have outputs');
+        }
+        delete abi.name;
+        delete abi.outputs;
+    }
+    return abi;
+}
+// @TODO: Allow a second boolean to expose names and modifiers
+/** @hidden */
+function formatSignature(fragment) {
+    return fragment.name + '(' + fragment.inputs.map(function (i) { return formatParamType(i); }).join(',') + ')';
+}
+exports.formatSignature = formatSignature;
+/** @hidden */
+function parseSignature(fragment) {
+    if (typeof fragment === 'string') {
+        // Make sure the "returns" is surrounded by a space and all whitespace is exactly one space
+        fragment = fragment.replace(/\s/g, ' ');
+        fragment = fragment
+            .replace(/\(/g, ' (')
+            .replace(/\)/g, ') ')
+            .replace(/\s+/g, ' ');
+        fragment = fragment.trim();
+        if (fragment.substring(0, 6) === 'event ') {
+            return parseSignatureEvent(fragment.substring(6).trim());
+        }
+        else {
+            if (fragment.substring(0, 9) === 'function ') {
+                fragment = fragment.substring(9);
+            }
+            return parseSignatureFunction(fragment.trim());
+        }
+    }
+    throw new Error('unknown signature');
+}
+exports.parseSignature = parseSignature;
+/** @hidden */
+var Coder = /** @class */ (function () {
+    function Coder(coerceFunc, name, type, localName, dynamic) {
+        this.coerceFunc = coerceFunc;
+        this.name = name;
+        this.type = type;
+        this.localName = localName;
+        this.dynamic = dynamic;
+    }
+    return Coder;
+}());
+// Clones the functionality of an existing Coder, but without a localName
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderAnonymous = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderAnonymous, _super);
+    function CoderAnonymous(coder) {
+        var _this = _super.call(this, coder.coerceFunc, coder.name, coder.type, undefined, coder.dynamic) || this;
+        _this.coder = coder;
+        return _this;
+    }
+    CoderAnonymous.prototype.encode = function (value) {
+        return this.coder.encode(value);
+    };
+    CoderAnonymous.prototype.decode = function (data, offset) {
+        return this.coder.decode(data, offset);
+    };
+    return CoderAnonymous;
+}(Coder));
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderNull = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderNull, _super);
+    function CoderNull(coerceFunc, localName) {
+        return _super.call(this, coerceFunc, 'null', '', localName, false) || this;
+    }
+    CoderNull.prototype.encode = function (value) {
+        var result = crypto_1.arrayify([]) || new Uint8Array();
+        return result;
+    };
+    CoderNull.prototype.decode = function (data, offset) {
+        if (offset > data.length) {
+            throw new Error('invalid null');
+        }
+        return {
+            consumed: 0,
+            value: this.coerceFunc('null', undefined),
+        };
+    };
+    return CoderNull;
+}(Coder));
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderNumber = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderNumber, _super);
+    function CoderNumber(coerceFunc, size, signed, localName) {
+        var _this = this;
+        var name = (signed ? 'int' : 'uint') + size * 8;
+        _this = _super.call(this, coerceFunc, name, name, localName, false) || this;
+        _this.size = size;
+        _this.signed = signed;
+        return _this;
+    }
+    CoderNumber.prototype.encode = function (value) {
+        var result;
+        try {
+            var v = new crypto_1.BN(value);
+            if (this.signed) {
+                var bounds = MaxUint256.maskn(this.size * 8 - 1);
+                if (v.gt(bounds)) {
+                    throw new Error('out-of-bounds');
+                }
+                bounds = bounds.add(One).mul(NegativeOne);
+                if (v.lt(bounds)) {
+                    throw new Error('out-of-bounds');
+                }
+            }
+            else if (v.lt(Zero) || v.gt(MaxUint256.maskn(this.size * 8))) {
+                throw new Error('out-of-bounds');
+            }
+            v = v.toTwos(this.size * 8).maskn(this.size * 8);
+            if (this.signed) {
+                v = v.fromTwos(this.size * 8).toTwos(256);
+            }
+            var vString = v.toString('hex');
+            result = crypto_1.padZeros(crypto_1.arrayify("0x" + vString) || new Uint8Array(), 32);
+        }
+        catch (error) {
+            crypto_1.throwError('invalid number value', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: this.name,
+                value: value,
+            });
+        }
+        return result || crypto_1.padZeros(new Uint8Array(), 32);
+    };
+    CoderNumber.prototype.decode = function (data, offset) {
+        if (data.length < offset + 32) {
+            crypto_1.throwError('insufficient data for ' + this.name + ' type', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: this.name,
+                value: crypto_1.hexlify(data.slice(offset, offset + 32)),
+            });
+        }
+        var junkLength = 32 - this.size;
+        var dataValue = crypto_1.hexlify(data.slice(offset + junkLength, offset + 32));
+        var value = utils_1.hexToBN(dataValue);
+        // tslint:disable-next-line: prefer-conditional-expression
+        if (this.signed) {
+            value = value.fromTwos(this.size * 8);
+        }
+        else {
+            value = value.maskn(this.size * 8);
+        }
+        return {
+            consumed: 32,
+            value: this.coerceFunc(this.name, value),
+        };
+    };
+    return CoderNumber;
+}(Coder));
+/** @hidden */
+var uint256Coder = new CoderNumber(function (type, value) {
+    return value;
+}, 32, false, 'none');
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderBoolean = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderBoolean, _super);
+    function CoderBoolean(coerceFunc, localName) {
+        return _super.call(this, coerceFunc, 'bool', 'bool', localName, false) || this;
+    }
+    CoderBoolean.prototype.encode = function (value) {
+        return uint256Coder.encode(!!value ? new crypto_1.BN(1) : new crypto_1.BN(0));
+    };
+    CoderBoolean.prototype.decode = function (data, offset) {
+        var result;
+        try {
+            result = uint256Coder.decode(data, offset);
+        }
+        catch (error) {
+            if (error.reason === 'insufficient data for uint256 type') {
+                crypto_1.throwError('insufficient data for boolean type', crypto_1.INVALID_ARGUMENT, {
+                    arg: this.localName,
+                    coderType: 'boolean',
+                    value: error.value,
+                });
+            }
+            throw error;
+        }
+        return {
+            consumed: result.consumed,
+            value: this.coerceFunc('bool', !result.value.isZero()),
+        };
+    };
+    return CoderBoolean;
+}(Coder));
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderFixedBytes = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderFixedBytes, _super);
+    function CoderFixedBytes(coerceFunc, length, localName) {
+        var _this = this;
+        var name = 'bytes' + length;
+        _this = _super.call(this, coerceFunc, name, name, localName, false) || this;
+        _this.length = length;
+        return _this;
+    }
+    CoderFixedBytes.prototype.encode = function (value) {
+        var result = new Uint8Array(this.length);
+        try {
+            var arrayied = crypto_1.arrayify(value);
+            var data = null;
+            if (arrayied !== null) {
+                var valueToByte = crypto_1.hexlify(arrayied);
+                data = crypto_1.arrayify(crypto_1.bytesPadRight(valueToByte, this.length));
+            }
+            else {
+                throw new Error('cannot arraify data');
+            }
+            if (data === null || data.length !== this.length) {
+                throw new Error('incorrect data length');
+            }
+            result.set(data);
+        }
+        catch (error) {
+            crypto_1.throwError('invalid ' + this.name + ' value', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: this.name,
+                value: error.value || value,
+            });
+        }
+        return result;
+    };
+    CoderFixedBytes.prototype.decode = function (data, offset) {
+        if (data.length < offset + 32) {
+            crypto_1.throwError('insufficient data for ' + name + ' type', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: this.name,
+                value: crypto_1.hexlify(data.slice(offset, offset + 32)),
+            });
+        }
+        return {
+            consumed: 32,
+            value: this.coerceFunc(this.name, crypto_1.hexlify(data.slice(offset, offset + this.length))),
+        };
+    };
+    return CoderFixedBytes;
+}(Coder));
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderAddress = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderAddress, _super);
+    function CoderAddress(coerceFunc, localName) {
+        return _super.call(this, coerceFunc, 'address', 'address', localName, false) || this;
+    }
+    CoderAddress.prototype.encode = function (value) {
+        var result = new Uint8Array(32);
+        try {
+            var addr = crypto_1.arrayify(crypto_1.toChecksumAddress(value)) || new Uint8Array();
+            result.set(addr, 12);
+        }
+        catch (error) {
+            crypto_1.throwError('invalid address', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: 'address',
+                value: value,
+            });
+        }
+        return result;
+    };
+    CoderAddress.prototype.decode = function (data, offset) {
+        if (data.length < offset + 32) {
+            crypto_1.throwError('insufficuent data for address type', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: 'address',
+                value: crypto_1.hexlify(data.slice(offset, offset + 32)),
+            });
+        }
+        return {
+            consumed: 32,
+            value: this.coerceFunc('address', crypto_1.toChecksumAddress(crypto_1.hexlify(data.slice(offset + 12, offset + 32)))),
+        };
+    };
+    return CoderAddress;
+}(Coder));
+/** @hidden */
+function _encodeDynamicBytes(value) {
+    var dataLength = 32 * Math.ceil(value.length / 32);
+    var padding = new Uint8Array(dataLength - value.length);
+    return crypto_1.concat([uint256Coder.encode(new crypto_1.BN(value.length)), value, padding]);
+}
+/** @hidden */
+function _decodeDynamicBytes(data, offset, localName) {
+    if (data.length < offset + 32) {
+        crypto_1.throwError('insufficient data for dynamicBytes length', crypto_1.INVALID_ARGUMENT, {
+            arg: localName,
+            coderType: 'dynamicBytes',
+            value: crypto_1.hexlify(data.slice(offset, offset + 32)),
+        });
+    }
+    var length = uint256Coder.decode(data, offset).value;
+    try {
+        length = length.toNumber();
+    }
+    catch (error) {
+        crypto_1.throwError('dynamic bytes count too large', crypto_1.INVALID_ARGUMENT, {
+            arg: localName,
+            coderType: 'dynamicBytes',
+            value: length.toString(),
+        });
+    }
+    if (data.length < offset + 32 + length) {
+        crypto_1.throwError('insufficient data for dynamicBytes type', crypto_1.INVALID_ARGUMENT, {
+            arg: localName,
+            coderType: 'dynamicBytes',
+            value: crypto_1.hexlify(data.slice(offset, offset + 32 + length)),
+        });
+    }
+    return {
+        consumed: 32 + 32 * Math.ceil(length / 32),
+        value: data.slice(offset + 32, offset + 32 + length),
+    };
+}
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderDynamicBytes = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderDynamicBytes, _super);
+    function CoderDynamicBytes(coerceFunc, localName) {
+        return _super.call(this, coerceFunc, 'bytes', 'bytes', localName, true) || this;
+    }
+    CoderDynamicBytes.prototype.encode = function (value) {
+        var result = new Uint8Array();
+        try {
+            result = _encodeDynamicBytes(crypto_1.arrayify(value) || new Uint8Array());
+        }
+        catch (error) {
+            crypto_1.throwError('invalid bytes value', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: 'bytes',
+                value: error.value,
+            });
+        }
+        return result;
+    };
+    CoderDynamicBytes.prototype.decode = function (data, offset) {
+        var result = _decodeDynamicBytes(data, offset, this.localName || '');
+        result.value = this.coerceFunc('bytes', crypto_1.hexlify(result.value));
+        return result;
+    };
+    return CoderDynamicBytes;
+}(Coder));
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderString = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderString, _super);
+    function CoderString(coerceFunc, localName) {
+        return _super.call(this, coerceFunc, 'string', 'string', localName, true) || this;
+    }
+    CoderString.prototype.encode = function (value) {
+        if (typeof value !== 'string') {
+            crypto_1.throwError('invalid string value', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: 'string',
+                value: value,
+            });
+        }
+        return _encodeDynamicBytes(toUtf8Bytes(value));
+    };
+    CoderString.prototype.decode = function (data, offset) {
+        var result = _decodeDynamicBytes(data, offset, this.localName || '');
+        result.value = this.coerceFunc('string', toUtf8String(result.value));
+        return result;
+    };
+    return CoderString;
+}(Coder));
+/** @hidden */
+function alignSize(size) {
+    return 32 * Math.ceil(size / 32);
+}
+/** @hidden */
+function pack(coders, values) {
+    if (Array.isArray(values)) {
+        // do nothing
+    }
+    else if (values && typeof values === 'object') {
+        var arrayValues_1 = [];
+        coders.forEach(function (coder) {
+            arrayValues_1.push(values[coder.localName || '']);
+        });
+        values = arrayValues_1;
+    }
+    else {
+        crypto_1.throwError('invalid tuple value', crypto_1.INVALID_ARGUMENT, {
+            coderType: 'tuple',
+            value: values,
+        });
+    }
+    if (coders.length !== values.length) {
+        crypto_1.throwError('types/value length mismatch', crypto_1.INVALID_ARGUMENT, {
+            coderType: 'tuple',
+            value: values,
+        });
+    }
+    var parts = [];
+    coders.forEach(function (coder, index) {
+        parts.push({ dynamic: coder.dynamic, value: coder.encode(values[index]) });
+    });
+    var staticSize = 0;
+    var dynamicSize = 0;
+    parts.forEach(function (part) {
+        if (part.dynamic) {
+            staticSize += 32;
+            dynamicSize += alignSize(part.value.length);
+        }
+        else {
+            staticSize += alignSize(part.value.length);
+            // todo : is it to be static size not alignSize?
+        }
+    });
+    var offset = 0;
+    var dynamicOffset = staticSize;
+    var data = new Uint8Array(staticSize + dynamicSize);
+    parts.forEach(function (part) {
+        if (part.dynamic) {
+            // uint256Coder.encode(dynamicOffset).copy(data, offset);
+            data.set(uint256Coder.encode(new crypto_1.BN(dynamicOffset)), offset);
+            offset += 32;
+            // part.value.copy(data, dynamicOffset);  @TODO
+            data.set(part.value, dynamicOffset);
+            dynamicOffset += alignSize(part.value.length);
+        }
+        else {
+            // part.value.copy(data, offset);  @TODO
+            data.set(part.value, offset);
+            offset += alignSize(part.value.length);
+        }
+    });
+    return data;
+}
+/** @hidden */
+function unpack(coders, data, offset) {
+    var baseOffset = offset;
+    var consumed = 0;
+    var value = [];
+    coders.forEach(function (coder) {
+        var result;
+        if (coder.dynamic) {
+            var dynamicOffset = uint256Coder.decode(data, offset);
+            result = coder.decode(data, baseOffset + dynamicOffset.value.toNumber());
+            // The dynamic part is leap-frogged somewhere else; doesn't count towards size
+            result.consumed = dynamicOffset.consumed;
+        }
+        else {
+            result = coder.decode(data, offset);
+        }
+        if (result.value !== undefined) {
+            value.push(result.value);
+        }
+        offset += result.consumed;
+        consumed += result.consumed;
+    });
+    coders.forEach(function (coder, index) {
+        var name = coder.localName;
+        if (!name) {
+            return;
+        }
+        if (name === 'length') {
+            name = '_length';
+        }
+        if (value[name] != null) {
+            return;
+        }
+        value[name] = value[index];
+    });
+    return {
+        value: value,
+        consumed: consumed,
+    };
+}
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderArray = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderArray, _super);
+    function CoderArray(coerceFunc, coder, length, localName) {
+        var _this = this;
+        var type = coder.type + '[' + (length >= 0 ? length : '') + ']';
+        var dynamic = length === -1 || coder.dynamic;
+        _this = _super.call(this, coerceFunc, 'array', type, localName, dynamic) || this;
+        _this.coder = coder;
+        _this.length = length;
+        return _this;
+    }
+    CoderArray.prototype.encode = function (value) {
+        if (!Array.isArray(value)) {
+            crypto_1.throwError('expected array value', crypto_1.INVALID_ARGUMENT, {
+                arg: this.localName,
+                coderType: 'array',
+                value: value,
+            });
+        }
+        var count = this.length;
+        var result = new Uint8Array(0);
+        if (count === -1) {
+            count = value.length;
+            result = uint256Coder.encode(new crypto_1.BN(count));
+        }
+        crypto_1.checkArgumentCount(count, value.length, ' in coder array' + (this.localName ? ' ' + this.localName : ''));
+        var coders = [];
+        // tslint:disable-next-line: prefer-for-of
+        for (var i = 0; i < value.length; i++) {
+            coders.push(this.coder);
+        }
+        return crypto_1.concat([result, pack(coders, value)]);
+    };
+    CoderArray.prototype.decode = function (data, offset) {
+        // @TODO:
+        // if (data.length < offset + length * 32) { throw new Error('invalid array'); }
+        var consumed = 0;
+        var count = this.length;
+        var decodedLength = { consumed: 0, value: undefined };
+        if (count === -1) {
+            try {
+                decodedLength = uint256Coder.decode(data, offset);
+            }
+            catch (error) {
+                crypto_1.throwError('insufficient data for dynamic array length', crypto_1.INVALID_ARGUMENT, {
+                    arg: this.localName,
+                    coderType: 'array',
+                    value: error.value,
+                });
+            }
+            try {
+                count = decodedLength.value.toNumber();
+            }
+            catch (error) {
+                crypto_1.throwError('array count too large', crypto_1.INVALID_ARGUMENT, {
+                    arg: this.localName,
+                    coderType: 'array',
+                    value: decodedLength.value.toString(),
+                });
+            }
+            consumed += decodedLength.consumed;
+            offset += decodedLength.consumed;
+        }
+        var coders = [];
+        for (var i = 0; i < count; i++) {
+            coders.push(new CoderAnonymous(this.coder));
+        }
+        var result = unpack(coders, data, offset);
+        result.consumed += consumed;
+        result.value = this.coerceFunc(this.type, result.value);
+        return result;
+    };
+    return CoderArray;
+}(Coder));
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var CoderTuple = /** @class */ (function (_super) {
+    tslib_1.__extends(CoderTuple, _super);
+    function CoderTuple(coerceFunc, coders, localName) {
+        var _this = this;
+        var dynamic = false;
+        var types = [];
+        coders.forEach(function (coder) {
+            if (coder.dynamic) {
+                dynamic = true;
+            }
+            types.push(coder.type);
+        });
+        var type = 'tuple(' + types.join(',') + ')';
+        _this = _super.call(this, coerceFunc, 'tuple', type, localName, dynamic) || this;
+        _this.coders = coders;
+        return _this;
+    }
+    CoderTuple.prototype.encode = function (value) {
+        return pack(this.coders, value);
+    };
+    CoderTuple.prototype.decode = function (data, offset) {
+        var result = unpack(this.coders, data, offset);
+        result.value = this.coerceFunc(this.type, result.value);
+        return result;
+    };
+    return CoderTuple;
+}(Coder));
+/** @hidden */
+function splitNesting(value) {
+    value = value.trim();
+    var result = [];
+    var accum = '';
+    var depth = 0;
+    // tslint:disable-next-line: prefer-for-of
+    for (var offset = 0; offset < value.length; offset++) {
+        var c = value[offset];
+        if (c === ',' && depth === 0) {
+            result.push(accum);
+            accum = '';
+        }
+        else {
+            accum += c;
+            if (c === '(') {
+                depth++;
+            }
+            else if (c === ')') {
+                depth--;
+                if (depth === -1) {
+                    throw new Error('unbalanced parenthsis');
+                }
+            }
+        }
+    }
+    if (accum) {
+        result.push(accum);
+    }
+    return result;
+}
+// @TODO: Is there a way to return "class"?
+/** @hidden */
+var paramTypeSimple = {
+    address: CoderAddress,
+    bool: CoderBoolean,
+    string: CoderString,
+    bytes: CoderDynamicBytes,
+};
+/** @hidden */
+function getTupleParamCoder(coerceFunc, components, localName) {
+    if (!components) {
+        components = [];
+    }
+    var coders = [];
+    components.forEach(function (component) {
+        coders.push(getParamCoder(coerceFunc, component));
+    });
+    return new CoderTuple(coerceFunc, coders, localName);
+}
+/** @hidden */
+function getParamCoder(coerceFunc, param) {
+    var coder = paramTypeSimple[param.type];
+    if (coder) {
+        return new coder(coerceFunc, param.name);
+    }
+    var matcher = param.type.match(paramTypeNumber);
+    if (matcher) {
+        var size = parseInt(matcher[2] || '256', 10);
+        if (size === 0 || size > 256 || size % 8 !== 0) {
+            crypto_1.throwError('invalid ' + matcher[1] + ' bit length', crypto_1.INVALID_ARGUMENT, {
+                arg: 'param',
+                value: param,
+            });
+        }
+        return new CoderNumber(coerceFunc, size / 8, matcher[1] === 'int', param.name || '');
+    }
+    var matcher2 = param.type.match(paramTypeBytes);
+    if (matcher2) {
+        var size = parseInt(matcher2[1], 10);
+        if (size === 0 || size > 32) {
+            crypto_1.throwError('invalid bytes length', crypto_1.INVALID_ARGUMENT, {
+                arg: 'param',
+                value: param,
+            });
+        }
+        return new CoderFixedBytes(coerceFunc, size, param.name || '');
+    }
+    var matcher3 = param.type.match(paramTypeArray);
+    if (matcher3) {
+        var size = parseInt(matcher3[2] || '-1', 10);
+        param = shallowCopy(param);
+        param.type = matcher3[1];
+        param = deepCopy(param);
+        return new CoderArray(coerceFunc, getParamCoder(coerceFunc, param), size, param.name || '');
+    }
+    if (param.type.substring(0, 5) === 'tuple') {
+        return getTupleParamCoder(coerceFunc, param.components || [], param.name || '');
+    }
+    if (param.type === '') {
+        return new CoderNull(coerceFunc, param.name || '');
+    }
+    crypto_1.throwError('invalid type', crypto_1.INVALID_ARGUMENT, {
+        arg: 'type',
+        value: param.type,
+    });
+}
+/** @hidden */
+var UnicodeNormalizationForm;
+(function (UnicodeNormalizationForm) {
+    UnicodeNormalizationForm["current"] = "";
+    UnicodeNormalizationForm["NFC"] = "NFC";
+    UnicodeNormalizationForm["NFD"] = "NFD";
+    UnicodeNormalizationForm["NFKC"] = "NFKC";
+    UnicodeNormalizationForm["NFKD"] = "NFKD";
+})(UnicodeNormalizationForm = exports.UnicodeNormalizationForm || (exports.UnicodeNormalizationForm = {}));
+/** @hidden */
+function toUtf8Bytes(str, form) {
+    if (form === void 0) { form = UnicodeNormalizationForm.current; }
+    if (form !== UnicodeNormalizationForm.current) {
+        crypto_1.checkNormalize();
+        str = str.normalize(form);
+    }
+    var result = [];
+    for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c < 0x80) {
+            result.push(c);
+        }
+        else if (c < 0x800) {
+            result.push((c >> 6) | 0xc0);
+            result.push((c & 0x3f) | 0x80);
+        }
+        else if ((c & 0xfc00) === 0xd800) {
+            i++;
+            var c2 = str.charCodeAt(i);
+            if (i >= str.length || (c2 & 0xfc00) !== 0xdc00) {
+                throw new Error('invalid utf-8 string');
+            }
+            // Surrogate Pair
+            c = 0x10000 + ((c & 0x03ff) << 10) + (c2 & 0x03ff);
+            result.push((c >> 18) | 0xf0);
+            result.push(((c >> 12) & 0x3f) | 0x80);
+            result.push(((c >> 6) & 0x3f) | 0x80);
+            result.push((c & 0x3f) | 0x80);
+        }
+        else {
+            result.push((c >> 12) | 0xe0);
+            result.push(((c >> 6) & 0x3f) | 0x80);
+            result.push((c & 0x3f) | 0x80);
+        }
+    }
+    return crypto_1.arrayify(result) || new Uint8Array();
+}
+exports.toUtf8Bytes = toUtf8Bytes;
+// http://stackoverflow.com/questions/13356493/decode-utf-8-with-javascript#13691499
+/** @hidden */
+function toUtf8String(bytes, ignoreErrors) {
+    bytes = crypto_1.arrayify(bytes) || new Uint8Array();
+    var result = '';
+    var i = 0;
+    // Invalid bytes are ignored
+    while (i < bytes.length) {
+        var c = bytes[i++];
+        // 0xxx xxxx
+        if (c >> 7 === 0) {
+            result += String.fromCharCode(c);
+            continue;
+        }
+        // Multibyte; how many bytes left for this character?
+        var extraLength = null;
+        var overlongMask = null;
+        // 110x xxxx 10xx xxxx
+        if ((c & 0xe0) === 0xc0) {
+            extraLength = 1;
+            overlongMask = 0x7f;
+            // 1110 xxxx 10xx xxxx 10xx xxxx
+        }
+        else if ((c & 0xf0) === 0xe0) {
+            extraLength = 2;
+            overlongMask = 0x7ff;
+            // 1111 0xxx 10xx xxxx 10xx xxxx 10xx xxxx
+        }
+        else if ((c & 0xf8) === 0xf0) {
+            extraLength = 3;
+            overlongMask = 0xffff;
+        }
+        else {
+            if (!ignoreErrors) {
+                if ((c & 0xc0) === 0x80) {
+                    throw new Error('invalid utf8 byte sequence; unexpected continuation byte');
+                }
+                throw new Error('invalid utf8 byte sequence; invalid prefix');
+            }
+            continue;
+        }
+        // Do we have enough bytes in our data?
+        if (i + extraLength > bytes.length) {
+            if (!ignoreErrors) {
+                throw new Error('invalid utf8 byte sequence; too short');
+            }
+            // If there is an invalid unprocessed byte, skip continuation bytes
+            for (; i < bytes.length; i++) {
+                if (bytes[i] >> 6 !== 0x02) {
+                    break;
+                }
+            }
+            continue;
+        }
+        // Remove the length prefix from the char
+        var res = c & ((1 << (8 - extraLength - 1)) - 1);
+        for (var j = 0; j < extraLength; j++) {
+            var nextChar = bytes[i];
+            // Invalid continuation byte
+            if ((nextChar & 0xc0) !== 0x80) {
+                res = null;
+                break;
+            }
+            res = (res << 6) | (nextChar & 0x3f);
+            i++;
+        }
+        if (res === null) {
+            if (!ignoreErrors) {
+                throw new Error('invalid utf8 byte sequence; invalid continuation byte');
+            }
+            continue;
+        }
+        // Check for overlong seuences (more bytes than needed)
+        if (res <= overlongMask) {
+            if (!ignoreErrors) {
+                throw new Error('invalid utf8 byte sequence; overlong');
+            }
+            continue;
+        }
+        // Maximum code point
+        if (res > 0x10ffff) {
+            if (!ignoreErrors) {
+                throw new Error('invalid utf8 byte sequence; out-of-range');
+            }
+            continue;
+        }
+        // Reserved for UTF-16 surrogate halves
+        if (res >= 0xd800 && res <= 0xdfff) {
+            if (!ignoreErrors) {
+                throw new Error('invalid utf8 byte sequence; utf-16 surrogate');
+            }
+            continue;
+        }
+        if (res <= 0xffff) {
+            result += String.fromCharCode(res);
+            continue;
+        }
+        res -= 0x10000;
+        result += String.fromCharCode(((res >> 10) & 0x3ff) + 0xd800, (res & 0x3ff) + 0xdc00);
+    }
+    return result;
+}
+exports.toUtf8String = toUtf8String;
+/** @hidden */
+function formatBytes32String(text) {
+    // Get the bytes
+    var bytes = toUtf8Bytes(text);
+    // Check we have room for null-termination
+    if (bytes.length > 31) {
+        throw new Error('bytes32 string must be less than 32 bytes');
+    }
+    // Zero-pad (implicitly null-terminates)
+    return crypto_1.hexlify(crypto_1.concat([bytes, HashZero]).slice(0, 32));
+}
+exports.formatBytes32String = formatBytes32String;
+/** @hidden */
+function parseBytes32String(bytes) {
+    var data = crypto_1.arrayify(bytes) || new Uint8Array();
+    // Must be 32 bytes with a null-termination
+    if (data.length !== 32) {
+        throw new Error('invalid bytes32 - not 32 bytes long');
+    }
+    if (data[31] !== 0) {
+        throw new Error('invalid bytes32 sdtring - no null terminator');
+    }
+    // Find the null termination
+    var length = 31;
+    while (data[length - 1] === 0) {
+        length--;
+    }
+    // Determine the string value
+    return toUtf8String(data.slice(0, length));
+}
+exports.parseBytes32String = parseBytes32String;
+/** @hidden */
+function isType(object, type) {
+    return object && object._ethersType === type;
+}
+exports.isType = isType;
+/** @hidden */
+function shallowCopy(object) {
+    var result = {};
+    // tslint:disable-next-line: forin
+    for (var key in object) {
+        result[key] = object[key];
+    }
+    return result;
+}
+exports.shallowCopy = shallowCopy;
+/** @hidden */
+var opaque = {
+    boolean: true,
+    number: true,
+    string: true,
+};
+/** @hidden */
+function deepCopy(object, frozen) {
+    // Opaque objects are not mutable, so safe to copy by assignment
+    if (object === undefined || object === null || opaque[typeof object]) {
+        return object;
+    }
+    // Arrays are mutable, so we need to create a copy
+    if (Array.isArray(object)) {
+        var result = object.map(function (item) { return deepCopy(item, frozen); });
+        if (frozen) {
+            Object.freeze(result);
+        }
+        return result;
+    }
+    if (typeof object === 'object') {
+        // Some internal objects, which are already immutable
+        if (isType(object, 'BigNumber')) {
+            return object;
+        }
+        if (isType(object, 'Description')) {
+            return object;
+        }
+        if (isType(object, 'Indexed')) {
+            return object;
+        }
+        var result = {};
+        // tslint:disable-next-line: forin
+        for (var key in object) {
+            var value = object[key];
+            if (value === undefined) {
+                continue;
+            }
+            utils_1.defineReadOnly(result, key, deepCopy(value, frozen));
+        }
+        if (frozen) {
+            Object.freeze(result);
+        }
+        return result;
+    }
+    // The function type is also immutable, so safe to copy by assignment
+    if (typeof object === 'function') {
+        return object;
+    }
+    throw new Error('Cannot deepCopy ' + typeof object);
+}
+exports.deepCopy = deepCopy;
+// tslint:disable-next-line: max-classes-per-file
+/** @hidden */
+var AbiCoder = /** @class */ (function () {
+    function AbiCoder(coerceFunc) {
+        crypto_1.checkNew(this, AbiCoder);
+        if (!coerceFunc) {
+            coerceFunc = exports.defaultCoerceFunc;
+        }
+        this.coerceFunc = coerceFunc;
+    }
+    AbiCoder.prototype.encode = function (types, values) {
+        var _this = this;
+        if (types.length !== values.length) {
+            crypto_1.throwError('types/values length mismatch', crypto_1.INVALID_ARGUMENT, {
+                count: { types: types.length, values: values.length },
+                value: { types: types, values: values },
+            });
+        }
+        var coders = [];
+        types.forEach(function (type) {
+            // Convert types to type objects
+            //   - "uint foo" => { type: "uint", name: "foo" }
+            //   - "tuple(uint, uint)" => { type: "tuple", components: [ { type: "uint" }, { type: "uint" }, ] }
+            var typeObject = null;
+            // tslint:disable-next-line: prefer-conditional-expression
+            if (typeof type === 'string') {
+                typeObject = parseParam(type);
+            }
+            else {
+                typeObject = type;
+            }
+            coders.push(getParamCoder(_this.coerceFunc, typeObject));
+        }, this);
+        var encodedArray = new CoderTuple(this.coerceFunc, coders, '_').encode(values);
+        return crypto_1.hexlify(encodedArray);
+    };
+    AbiCoder.prototype.decode = function (types, data) {
+        var _this = this;
+        var coders = [];
+        types.forEach(function (type) {
+            // See encode for details
+            var typeObject = null;
+            // tslint:disable-next-line: prefer-conditional-expression
+            if (typeof type === 'string') {
+                typeObject = parseParam(type);
+            }
+            else {
+                typeObject = deepCopy(type);
+            }
+            coders.push(getParamCoder(_this.coerceFunc, typeObject));
+        }, this);
+        var result = new CoderTuple(this.coerceFunc, coders, '_').decode(crypto_1.arrayify(data) || new Uint8Array(), 0).value;
+        return result;
+    };
+    return AbiCoder;
+}());
+exports.AbiCoder = AbiCoder;
+/** @hidden */
+exports.defaultAbiCoder = new AbiCoder();
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/abi/utils.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.bnToString = exports.flattenTypes = exports.jsonInterfaceMethodToString = void 0;
+var utils_1 = require("@harmony-js/utils");
+var crypto_1 = require("@harmony-js/crypto");
+exports.jsonInterfaceMethodToString = function (json) {
+    if (utils_1.isObject(json) && json.name && json.name.includes('(')) {
+        return json.name;
+    }
+    return json.name + "(" + exports.flattenTypes(false, json.inputs).join(',') + ")";
+};
+exports.flattenTypes = function (includeTuple, puts) {
+    // console.log("entered _flattenTypes. inputs/outputs: " + puts)
+    var types = [];
+    puts.forEach(function (param) {
+        if (typeof param.components === 'object') {
+            if (param.type.substring(0, 5) !== 'tuple') {
+                throw new Error('components found but type is not tuple; report on GitHub');
+            }
+            var suffix = '';
+            var arrayBracket = param.type.indexOf('[');
+            if (arrayBracket >= 0) {
+                suffix = param.type.substring(arrayBracket);
+            }
+            var result = exports.flattenTypes(includeTuple, param.components);
+            // console.log("result should have things: " + result)
+            if (utils_1.isArray(result) && includeTuple) {
+                // console.log("include tuple word, and its an array. joining...: " + result.types)
+                types.push("tuple(" + result.join(',') + ")" + suffix);
+            }
+            else if (!includeTuple) {
+                // console.log("don't include tuple, but its an array. joining...: " + result)
+                types.push("(" + result.join(',') + ")" + suffix);
+            }
+            else {
+                // console.log("its a single type within a tuple: " + result.types)
+                types.push("(" + result + ")");
+            }
+        }
+        else {
+            // console.log("its a type and not directly in a tuple: " + param.type)
+            types.push(param.type);
+        }
+    });
+    return types;
+};
+function bnToString(result) {
+    if (crypto_1.BN.isBN(result)) {
+        return result.toString();
+    }
+    else {
+        return result;
+    }
+}
+exports.bnToString = bnToString;
+
+},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/abi/api.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AbiCoderClass = void 0;
+var abiCoder_1 = require("./abiCoder");
+var utils_1 = require("@harmony-js/utils");
+var crypto_1 = require("@harmony-js/crypto");
+var utils_2 = require("./utils");
+var AbiCoderClass = /** @class */ (function () {
+    function AbiCoderClass(coder) {
+        this.coder = coder;
+    }
+    AbiCoderClass.prototype.encodeFunctionSignature = function (functionName) {
+        if (utils_1.isObject(functionName)) {
+            functionName = utils_2.jsonInterfaceMethodToString(functionName);
+        }
+        var result = crypto_1.keccak256(abiCoder_1.toUtf8Bytes(functionName));
+        return result.slice(0, 10);
+    };
+    AbiCoderClass.prototype.encodeEventSignature = function (functionName) {
+        if (utils_1.isObject(functionName)) {
+            functionName = utils_2.jsonInterfaceMethodToString(functionName);
+        }
+        var result = crypto_1.keccak256(abiCoder_1.toUtf8Bytes(functionName));
+        return result;
+    };
+    AbiCoderClass.prototype.encodeParameter = function (types, param) {
+        return this.encodeParameters([types], [param]);
+    };
+    AbiCoderClass.prototype.encodeParameters = function (types, params) {
+        return this.coder.encode(types, params);
+    };
+    AbiCoderClass.prototype.encodeFunctionCall = function (jsonInterface, params) {
+        return (this.encodeFunctionSignature(jsonInterface) +
+            this.encodeParameters(jsonInterface.inputs, params).replace('0x', ''));
+    };
+    AbiCoderClass.prototype.decodeParameter = function (type, bytes) {
+        return this.decodeParameters([type], bytes)[0];
+    };
+    AbiCoderClass.prototype.decodeParameters = function (outputs, bytes) {
+        if (utils_1.isArray(outputs) && outputs.length === 0) {
+            throw new Error('Empty outputs array given!');
+        }
+        if (!bytes || bytes === '0x' || bytes === '0X') {
+            throw new Error("Invalid bytes string given: " + bytes);
+        }
+        var result = this.coder.decode(outputs, bytes);
+        var returnValues = {};
+        var decodedValue;
+        if (utils_1.isArray(result)) {
+            if (outputs.length > 1) {
+                outputs.forEach(function (output, i) {
+                    decodedValue = result[i];
+                    if (decodedValue === '0x') {
+                        decodedValue = null;
+                    }
+                    returnValues[i] = utils_2.bnToString(decodedValue);
+                    if (utils_1.isObject(output) && output.name) {
+                        returnValues[output.name] = utils_2.bnToString(decodedValue);
+                    }
+                });
+                return returnValues;
+            }
+            return utils_2.bnToString(result);
+        }
+        if (utils_1.isObject(outputs[0]) && outputs[0].name) {
+            returnValues[outputs[0].name] = utils_2.bnToString(result);
+        }
+        returnValues[0] = utils_2.bnToString(result);
+        return returnValues;
+    };
+    AbiCoderClass.prototype.decodeLog = function (inputs, data, topics) {
+        var _this = this;
+        if (data === void 0) { data = ''; }
+        var returnValues = {};
+        var topicCount = 0;
+        var value;
+        var nonIndexedInputKeys = [];
+        var nonIndexedInputItems = [];
+        if (!utils_1.isArray(topics)) {
+            topics = [topics];
+        }
+        inputs.forEach(function (input, i) {
+            if (input.indexed) {
+                if (input.type === 'string') {
+                    return;
+                }
+                value = topics[topicCount];
+                if (_this.isStaticType(input.type)) {
+                    value = _this.decodeParameter(input.type, topics[topicCount]);
+                }
+                returnValues[i] = utils_2.bnToString(value);
+                returnValues[input.name] = utils_2.bnToString(value);
+                topicCount++;
+                return;
+            }
+            nonIndexedInputKeys.push(i);
+            nonIndexedInputItems.push(input);
+        });
+        if (data) {
+            var values_1 = this.decodeParameters(nonIndexedInputItems, data);
+            var decodedValue_1;
+            nonIndexedInputKeys.forEach(function (itemKey, index) {
+                decodedValue_1 = values_1[index];
+                returnValues[itemKey] = utils_2.bnToString(decodedValue_1);
+                returnValues[nonIndexedInputItems[index].name] = utils_2.bnToString(decodedValue_1);
+            });
+        }
+        return returnValues;
+    };
+    AbiCoderClass.prototype.isStaticType = function (type) {
+        if (type === 'bytes') {
+            return false;
+        }
+        if (type === 'string') {
+            return false;
+        }
+        if (type.indexOf('[') && type.slice(type.indexOf('[')).length === 2) {
+            return false;
+        }
+        return true;
+    };
+    return AbiCoderClass;
+}());
+exports.AbiCoderClass = AbiCoderClass;
+
+},{"./abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","./utils":"../node_modules/@harmony-js/contract/dist/abi/utils.js"}],"../node_modules/@harmony-js/contract/dist/abi/index.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AbiCoder = void 0;
+var api_1 = require("./api");
+var abiCoder_1 = require("./abiCoder");
+function AbiCoder() {
+    return new api_1.AbiCoderClass(new abiCoder_1.AbiCoder());
+}
+exports.AbiCoder = AbiCoder;
+
+},{"./api":"../node_modules/@harmony-js/contract/dist/abi/api.js","./abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js"}],"../node_modules/mitt/dist/mitt.es.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -70376,7 +72011,2393 @@ tslib_1.__exportStar(require("./utils"), exports);
 tslib_1.__exportStar(require("./transactionBase"), exports);
 tslib_1.__exportStar(require("./abstractTransaction"), exports);
 
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","./factory":"../node_modules/@harmony-js/transaction/dist/factory.js","./transaction":"../node_modules/@harmony-js/transaction/dist/transaction.js","./shardingTransaction":"../node_modules/@harmony-js/transaction/dist/shardingTransaction.js","./types":"../node_modules/@harmony-js/transaction/dist/types.js","./utils":"../node_modules/@harmony-js/transaction/dist/utils.js","./transactionBase":"../node_modules/@harmony-js/transaction/dist/transactionBase.js","./abstractTransaction":"../node_modules/@harmony-js/transaction/dist/abstractTransaction.js"}],"../node_modules/text-encoding/lib/encoding-indexes.js":[function(require,module,exports) {
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","./factory":"../node_modules/@harmony-js/transaction/dist/factory.js","./transaction":"../node_modules/@harmony-js/transaction/dist/transaction.js","./shardingTransaction":"../node_modules/@harmony-js/transaction/dist/shardingTransaction.js","./types":"../node_modules/@harmony-js/transaction/dist/types.js","./utils":"../node_modules/@harmony-js/transaction/dist/utils.js","./transactionBase":"../node_modules/@harmony-js/transaction/dist/transactionBase.js","./abstractTransaction":"../node_modules/@harmony-js/transaction/dist/abstractTransaction.js"}],"../node_modules/@harmony-js/account/dist/utils.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-account
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.defaultMessenger = void 0;
+var network_1 = require("@harmony-js/network");
+var utils_1 = require("@harmony-js/utils");
+exports.defaultMessenger = new network_1.Messenger(new network_1.HttpProvider('http://localhost:9500'), utils_1.ChainType.Harmony, utils_1.ChainID.HmyLocal);
+
+},{"@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/account/dist/account.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-account
+ *
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Account = void 0;
+var tslib_1 = require("tslib");
+var crypto_1 = require("@harmony-js/crypto");
+var utils_1 = require("@harmony-js/utils");
+var transaction_1 = require("@harmony-js/transaction");
+var network_1 = require("@harmony-js/network");
+var utils_2 = require("./utils");
+var Account = /** @class */ (function () {
+    /**
+     * Generate an account object
+     *
+     * @param key import an existing privateKey, or create a random one
+     * @param messenger you can setMessage later, or set message on `new`
+     *
+     * @example
+     * ```javascript
+     * // import the Account class
+     * const { Account } = require('@harmony-js/account');
+     *
+     * // Messenger is optional, by default, we have a defaultMessenger
+     * // If you like to change, you will import related package here.
+     * const { HttpProvider, Messenger } = require('@harmony-js/network');
+     * const { ChainType, ChainID } = require('@harmony-js/utils');
+     *
+     * // create a custom messenger
+     * const customMessenger = new Messenger(
+     *   new HttpProvider('http://localhost:9500'),
+     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
+     *   ChainID.HmyLocal, // check if the chainId is correct
+     * )
+     *
+     * // setMessenger later
+     * const randomAccount = new Account()
+     * randomAccount.setMessenger(customMessenger)
+     *
+     * // or you can set messenger on `new`
+     * const randomAccountWithCustomMessenger = new Account(undefined, customMessenger)
+     *
+     * // NOTED: Key with or without `0x` are accepted, makes no different
+     * // NOTED: DO NOT import `mnemonic phrase` using `Account` class, use `Wallet` instead
+     * const myPrivateKey = '0xe19d05c5452598e24caad4a0d85a49146f7be089515c905ae6a19e8a578a6930'
+     * const myAccountWithMyPrivateKey = new Account(myPrivateKey)
+     * ```
+     */
+    function Account(key, messenger) {
+        if (messenger === void 0) { messenger = utils_2.defaultMessenger; }
+        /**@hidden */
+        this.balance = '0';
+        /**@hidden */
+        this.nonce = 0;
+        /**@hidden */
+        this.encrypted = false;
+        this.messenger = messenger;
+        if (!key) {
+            this._new();
+        }
+        else {
+            this._import(key);
+        }
+        this.shardID = this.messenger.currentShard || 0;
+        this.shards = new Map();
+        this.shards.set(this.shardID, {
+            address: "" + this.bech32Address + utils_1.AddressSuffix + "0",
+            balance: this.balance || '0',
+            nonce: this.nonce || 0,
+        });
+    }
+    /**
+     * static method create account
+     *
+     * @example
+     * ```javascript
+     * const account = new Account();
+     * console.log(account);
+     * ```
+     */
+    Account.new = function () {
+        var newAcc = new Account()._new();
+        return newAcc;
+    };
+    /**
+     * Static Method: add a private key to Account
+     * @param  {string} key - private Key
+     *
+     * @example
+     * ```javascript
+     * const account = new Account.add(key_1);
+     * console.log(account);
+     * ```
+     */
+    Account.add = function (key) {
+        var newAcc = new Account()._import(key);
+        return newAcc;
+    };
+    Object.defineProperty(Account.prototype, "checksumAddress", {
+        /**
+         * check sum address
+         *
+         * @example
+         * ```javascript
+         * console.log(account.checksumAddress);
+         * ```
+         */
+        get: function () {
+            return this.address ? crypto_1.getAddress(this.address).checksum : '';
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(Account.prototype, "bech32Address", {
+        /**
+         * Get bech32 Address
+         *
+         * @example
+         * ```javascript
+         * console.log(account.bech32Address);
+         * ```
+         */
+        get: function () {
+            return this.address ? crypto_1.getAddress(this.address).bech32 : '';
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(Account.prototype, "bech32TestNetAddress", {
+        /**
+         * get Bech32 TestNet Address
+         *
+         * @example
+         * ```javascript
+         * console.log(account.bech32TestNetAddress);
+         * ```
+         */
+        get: function () {
+            return this.address ? crypto_1.getAddress(this.address).bech32TestNet : '';
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(Account.prototype, "getShardsCount", {
+        /**
+         * get Shards number with this Account
+         *
+         * @example
+         * ```javascript
+         * console.log(account.getShardsCount);
+         * ```
+         */
+        get: function () {
+            return this.shards.size;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Account.prototype.toFile = function (password, options) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var file;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(this.privateKey && utils_1.isPrivateKey(this.privateKey))) return [3 /*break*/, 2];
+                        return [4 /*yield*/, crypto_1.encrypt(this.privateKey, password, options)];
+                    case 1:
+                        file = _a.sent();
+                        this.privateKey = file;
+                        this.encrypted = true;
+                        return [2 /*return*/, file];
+                    case 2: throw new Error('Encryption failed because PrivateKey is not correct');
+                }
+            });
+        });
+    };
+    Account.prototype.fromFile = function (keyStore, password) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var file, decyptedPrivateKey, error_1;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        if (typeof password !== 'string') {
+                            throw new Error('you must provide password');
+                        }
+                        file = JSON.parse(keyStore.toLowerCase());
+                        return [4 /*yield*/, crypto_1.decrypt(file, password)];
+                    case 1:
+                        decyptedPrivateKey = _a.sent();
+                        if (utils_1.isPrivateKey(decyptedPrivateKey)) {
+                            return [2 /*return*/, this._import(decyptedPrivateKey)];
+                        }
+                        else {
+                            throw new Error('decrypted failed');
+                        }
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_1 = _a.sent();
+                        throw error_1;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Get the account balance
+     *
+     * @param blockNumber by default, it's `latest`
+     *
+     * @example
+     * ```javascript
+     * account.getBalance().then((value) => {
+     *   console.log(value);
+     * });
+     * ```
+     */
+    Account.prototype.getBalance = function (blockNumber) {
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var balance, nonce, error_2;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 5, , 6]);
+                        if (!this.messenger) return [3 /*break*/, 3];
+                        return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetBalance, [this.address, blockNumber], this.messenger.chainPrefix, this.messenger.currentShard || 0)];
+                    case 1:
+                        balance = _a.sent();
+                        return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetTransactionCount, [this.address, blockNumber], this.messenger.chainPrefix, this.messenger.currentShard || 0)];
+                    case 2:
+                        nonce = _a.sent();
+                        if (balance.isError()) {
+                            throw balance.error.message;
+                        }
+                        if (nonce.isError()) {
+                            throw nonce.error.message;
+                        }
+                        this.balance = utils_1.hexToNumber(balance.result);
+                        this.nonce = Number.parseInt(utils_1.hexToNumber(nonce.result), 10);
+                        this.shardID = this.messenger.currentShard || 0;
+                        return [3 /*break*/, 4];
+                    case 3: throw new Error('No Messenger found');
+                    case 4: return [2 /*return*/, {
+                            balance: this.balance,
+                            nonce: this.nonce,
+                            shardID: this.shardID,
+                        }];
+                    case 5:
+                        error_2 = _a.sent();
+                        throw error_2;
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * @function updateShards
+     */
+    Account.prototype.updateBalances = function (blockNumber) {
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var shardProviders, shardProviders_1, shardProviders_1_1, _a, name_1, val, balanceObject, e_1_1, currentShard;
+            var e_1, _b;
+            return tslib_1.__generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        shardProviders = this.messenger.shardProviders;
+                        if (!(shardProviders.size > 1)) return [3 /*break*/, 10];
+                        _c.label = 1;
+                    case 1:
+                        _c.trys.push([1, 7, 8, 9]);
+                        shardProviders_1 = tslib_1.__values(shardProviders), shardProviders_1_1 = shardProviders_1.next();
+                        _c.label = 2;
+                    case 2:
+                        if (!!shardProviders_1_1.done) return [3 /*break*/, 6];
+                        _a = tslib_1.__read(shardProviders_1_1.value, 2), name_1 = _a[0], val = _a[1];
+                        return [4 /*yield*/, this.getShardBalance(val.shardID, blockNumber)];
+                    case 3:
+                        balanceObject = _c.sent();
+                        return [4 /*yield*/, this.shards.set(name_1 === val.shardID ? name_1 : val.shardID, balanceObject)];
+                    case 4:
+                        _c.sent();
+                        _c.label = 5;
+                    case 5:
+                        shardProviders_1_1 = shardProviders_1.next();
+                        return [3 /*break*/, 2];
+                    case 6: return [3 /*break*/, 9];
+                    case 7:
+                        e_1_1 = _c.sent();
+                        e_1 = { error: e_1_1 };
+                        return [3 /*break*/, 9];
+                    case 8:
+                        try {
+                            if (shardProviders_1_1 && !shardProviders_1_1.done && (_b = shardProviders_1.return)) _b.call(shardProviders_1);
+                        }
+                        finally { if (e_1) throw e_1.error; }
+                        return [7 /*endfinally*/];
+                    case 9: return [3 /*break*/, 12];
+                    case 10: return [4 /*yield*/, this.getShardBalance(this.messenger.currentShard || 0, blockNumber)];
+                    case 11:
+                        currentShard = _c.sent();
+                        this.shards.set(this.messenger.currentShard || 0, currentShard);
+                        _c.label = 12;
+                    case 12: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * @function signTransaction
+     */
+    Account.prototype.signTransaction = function (transaction, updateNonce, encodeMode, blockNumber) {
+        if (updateNonce === void 0) { updateNonce = true; }
+        if (encodeMode === void 0) { encodeMode = 'rlp'; }
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var txShardID, shardBalanceObject, shardNonce, _a, signature_1, rawTransaction_1;
+            var _this = this;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        if (!this.privateKey || !utils_1.isPrivateKey(this.privateKey)) {
+                            throw new Error(this.privateKey + " is not found or not correct");
+                        }
+                        if (!updateNonce) return [3 /*break*/, 2];
+                        txShardID = transaction.txParams.shardID;
+                        return [4 /*yield*/, this.getShardBalance(typeof txShardID === 'string' ? Number.parseInt(txShardID, 10) : txShardID, blockNumber)];
+                    case 1:
+                        shardBalanceObject = _b.sent();
+                        if (shardBalanceObject !== undefined) {
+                            shardNonce = shardBalanceObject.nonce;
+                            transaction.setParams(tslib_1.__assign(tslib_1.__assign({}, transaction.txParams), { from: this.messenger.chainPrefix === utils_1.ChainType.Harmony
+                                    ? this.bech32Address
+                                    : this.checksumAddress || '0x', nonce: shardNonce }));
+                        }
+                        else {
+                            transaction.setParams(tslib_1.__assign(tslib_1.__assign({}, transaction.txParams), { from: this.messenger.chainPrefix === utils_1.ChainType.Harmony
+                                    ? this.bech32Address
+                                    : this.checksumAddress || '0x', nonce: 0 }));
+                        }
+                        _b.label = 2;
+                    case 2:
+                        if (encodeMode === 'rlp') {
+                            _a = tslib_1.__read(transaction_1.RLPSign(transaction, this.privateKey), 2), signature_1 = _a[0], rawTransaction_1 = _a[1];
+                            return [2 /*return*/, transaction.map(function (obj) {
+                                    return tslib_1.__assign(tslib_1.__assign({}, obj), { signature: signature_1,
+                                        rawTransaction: rawTransaction_1, from: _this.messenger.chainPrefix === utils_1.ChainType.Harmony
+                                            ? _this.bech32Address
+                                            : _this.checksumAddress || '0x' });
+                                })];
+                        }
+                        else {
+                            // TODO: if we use other encode method, eg. protobuf, we should implement this
+                            return [2 /*return*/, transaction];
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * This function is still in development, coming soon!
+     *
+     * @param staking
+     * @param updateNonce
+     * @param encodeMode
+     * @param blockNumber
+     * @param shardID
+     */
+    Account.prototype.signStaking = function (staking, updateNonce, encodeMode, blockNumber, shardID) {
+        if (updateNonce === void 0) { updateNonce = true; }
+        if (encodeMode === void 0) { encodeMode = 'rlp'; }
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        if (shardID === void 0) { shardID = this.messenger.currentShard; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var txShardID, shardBalanceObject, shardNonce, _a, signature, rawTransaction;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        if (!this.privateKey || !utils_1.isPrivateKey(this.privateKey)) {
+                            throw new Error(this.privateKey + " is not found or not correct");
+                        }
+                        if (!updateNonce) return [3 /*break*/, 2];
+                        txShardID = shardID;
+                        return [4 /*yield*/, this.getShardBalance(typeof txShardID === 'string' ? Number.parseInt(txShardID, 10) : txShardID, blockNumber)];
+                    case 1:
+                        shardBalanceObject = _b.sent();
+                        if (shardBalanceObject !== undefined) {
+                            shardNonce = shardBalanceObject.nonce;
+                            staking.setFromAddress(this.messenger.chainPrefix === utils_1.ChainType.Harmony
+                                ? this.bech32Address
+                                : this.checksumAddress || '0x');
+                            staking.setNonce(shardNonce);
+                        }
+                        else {
+                            staking.setFromAddress(this.messenger.chainPrefix === utils_1.ChainType.Harmony
+                                ? this.bech32Address
+                                : this.checksumAddress || '0x');
+                            staking.setNonce(0);
+                        }
+                        _b.label = 2;
+                    case 2:
+                        if (encodeMode === 'rlp') {
+                            _a = tslib_1.__read(staking.rlpSign(this.privateKey), 2), signature = _a[0], rawTransaction = _a[1];
+                            staking.setRawTransaction(rawTransaction);
+                            staking.setSignature(signature);
+                            staking.setFromAddress(this.messenger.chainPrefix === utils_1.ChainType.Harmony
+                                ? this.bech32Address
+                                : this.checksumAddress || '0x');
+                            return [2 /*return*/, staking];
+                        }
+                        else {
+                            // TODO: if we use other encode method, eg. protobuf, we should implement this
+                            return [2 /*return*/, staking];
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * @param messenger
+     *
+     * @example
+     * ```javascript
+     * // create a custom messenger
+     * const customMessenger = new Messenger(
+     *   new HttpProvider('http://localhost:9500'),
+     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
+     *   ChainID.HmyLocal, // check if the chainId is correct
+     * )
+     *
+     * // to create an Account with random privateKey
+     * // and you can setMessenger later
+     * const randomAccount = new Account()
+     * randomAccount.setMessenger(customMessenger)
+     * ```
+     */
+    Account.prototype.setMessenger = function (messenger) {
+        this.messenger = messenger;
+    };
+    /**
+     * Get account address from shard ID
+     * @param shardID
+     *
+     * @example
+     * ```javascript
+     * console.log(account.getAddressFromShardID(0));
+     *
+     * > one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7-0
+     * ```
+     */
+    Account.prototype.getAddressFromShardID = function (shardID) {
+        var shardObject = this.shards.get(shardID);
+        if (shardObject) {
+            return shardObject.address;
+        }
+        else {
+            return undefined;
+        }
+    };
+    /**
+     * Get all shards' addresses from the account
+     *
+     * @example
+     * ```javascript
+     * console.log(account.getAddresses());
+     * ```
+     */
+    Account.prototype.getAddresses = function () {
+        var e_2, _a;
+        var addressArray = [];
+        try {
+            for (var _b = tslib_1.__values(this.shards), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var _d = tslib_1.__read(_c.value, 2), name_2 = _d[0], val = _d[1];
+                var index = typeof name_2 === 'string' ? Number.parseInt(name_2, 10) : name_2;
+                addressArray[index] = val.address;
+            }
+        }
+        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_2) throw e_2.error; }
+        }
+        return addressArray;
+    };
+    /**
+     * Get the specific shard's balance
+     *
+     * @param shardID `shardID` is binding with the endpoint, IGNORE it!
+     * @param blockNumber by default, it's `latest`
+     *
+     * @example
+     * ```
+     * account.getShardBalance().then((value) => {
+     *   console.log(value);
+     * });
+     * ```
+     */
+    Account.prototype.getShardBalance = function (shardID, blockNumber) {
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var balance, nonce;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetBalance, [this.address, blockNumber], this.messenger.chainPrefix, shardID)];
+                    case 1:
+                        balance = _a.sent();
+                        return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetTransactionCount, [this.address, blockNumber], this.messenger.chainPrefix, shardID)];
+                    case 2:
+                        nonce = _a.sent();
+                        if (balance.isError()) {
+                            throw balance.error.message;
+                        }
+                        if (nonce.isError()) {
+                            throw nonce.error.message;
+                        }
+                        return [2 /*return*/, {
+                                address: "" + this.bech32Address + utils_1.AddressSuffix + shardID,
+                                balance: utils_1.hexToNumber(balance.result),
+                                nonce: Number.parseInt(utils_1.hexToNumber(nonce.result), 10),
+                            }];
+                }
+            });
+        });
+    };
+    /**
+     * @function _new private method create Account
+     * @return {Account} Account instance
+     * @ignore
+     */
+    Account.prototype._new = function () {
+        var prv = crypto_1.generatePrivateKey();
+        if (!utils_1.isPrivateKey(prv)) {
+            throw new Error('key gen failed');
+        }
+        return this._import(prv);
+    };
+    /**
+     * @function _import private method import a private Key
+     * @param  {string} key - private key
+     * @return {Account} Account instance
+     * @ignore
+     */
+    Account.prototype._import = function (key) {
+        if (!utils_1.isPrivateKey(key)) {
+            throw new Error(key + " is not PrivateKey");
+        }
+        this.privateKey = utils_1.add0xToString(key);
+        this.publicKey = crypto_1.getPubkeyFromPrivateKey(this.privateKey);
+        this.address = crypto_1.getAddressFromPrivateKey(this.privateKey);
+        this.shardID = this.messenger.currentShard || 0;
+        this.shards = new Map();
+        this.shards.set(this.shardID, {
+            address: "" + this.bech32Address + utils_1.AddressSuffix + "0",
+            balance: this.balance || '0',
+            nonce: this.nonce || 0,
+        });
+        this.encrypted = false;
+        return this;
+    };
+    return Account;
+}());
+exports.Account = Account;
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/transaction":"../node_modules/@harmony-js/transaction/dist/index.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","./utils":"../node_modules/@harmony-js/account/dist/utils.js"}],"../node_modules/@harmony-js/account/dist/wallet.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-account
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Wallet = void 0;
+var tslib_1 = require("tslib");
+var crypto_1 = require("@harmony-js/crypto");
+var utils_1 = require("@harmony-js/utils");
+var account_1 = require("./account");
+var utils_2 = require("./utils");
+var Wallet = /** @class */ (function () {
+    /**
+     * @example
+     * ```
+     * const { Wallet } = require('@harmony-js/account');
+     * const { HttpProvider, Messenger } = require('@harmony-js/network');
+     * const { ChainType, ChainID } = require('@harmony-js/utils');
+     *
+     * // create a custom messenger
+     * const customMessenger = new Messenger(
+     *   new HttpProvider('http://localhost:9500'),
+     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
+     *   ChainID.HmyLocal, // check if the chainId is correct
+     * )
+     *
+     * const wallet = new Wallet(customMessenger);
+     * ```
+     */
+    function Wallet(messenger) {
+        if (messenger === void 0) { messenger = utils_2.defaultMessenger; }
+        /**
+         * @hidden
+         */
+        this.accountMap = new Map();
+        this.messenger = messenger;
+    }
+    // static method generate Mnemonic
+    Wallet.generateMnemonic = function () {
+        return crypto_1.bip39.generateMnemonic();
+    };
+    Object.defineProperty(Wallet.prototype, "accounts", {
+        /**
+         * get acounts addresses
+         *
+         * @return {string[]} accounts addresses
+         *
+         * @example
+         * ```javascript
+         * const wallet = new Wallet(customMessenger);
+         * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
+         * wallet.addByPrivateKey(key_1);
+         *
+         * console.log(wallet.accounts);
+         * ```
+         */
+        get: function () {
+            return tslib_1.__spread(this.accountMap.keys());
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(Wallet.prototype, "signer", {
+        /**
+         * get the signer of the account, by default, using the first account
+         *
+         * @example
+         * ```javascript
+         * const wallet = new Wallet(customMessenger);
+         * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
+         * wallet.addByPrivateKey(key_1);
+         *
+         * console.log(wallet.signer)
+         * ```
+         */
+        get: function () {
+            if (this.defaultSigner) {
+                return this.getAccount(this.defaultSigner);
+            }
+            else if (!this.defaultSigner && this.accounts.length > 0) {
+                this.setSigner(this.accounts[0]);
+                return this.getAccount(this.accounts[0]);
+            }
+            else {
+                return undefined;
+            }
+        },
+        enumerable: false,
+        configurable: true
+    });
+    /**
+     * @function newMnemonic
+     * @memberof Wallet
+     * @return {string} Mnemonics
+     */
+    Wallet.prototype.newMnemonic = function () {
+        return Wallet.generateMnemonic();
+    };
+    /**
+     * Add account using Mnemonic phrases
+     * @param  {string} phrase - Mnemonic phrase
+     * @param  {index} index - index to hdKey root
+     *
+     * @example
+     * ```javascript
+     * const mnemonic_1 = 'urge clog right example dish drill card maximum mix bachelor section select';
+     * const wallet = new Wallet(customMessenger);
+     * wallet.addByMnemonic(mnemonic_1);
+     *
+     * console.log(wallet.accounts);
+     * ```
+     */
+    Wallet.prototype.addByMnemonic = function (phrase, index) {
+        if (index === void 0) { index = 0; }
+        if (!this.isValidMnemonic(phrase)) {
+            throw new Error("Invalid mnemonic phrase: " + phrase);
+        }
+        var seed = crypto_1.bip39.mnemonicToSeed(phrase);
+        var hdKey = crypto_1.hdkey.fromMasterSeed(seed);
+        // TODO:hdkey should apply to Harmony's settings
+        var path = this.messenger.chainType === utils_1.ChainType.Harmony ? '1023' : '60';
+        var childKey = hdKey.derive("m/44'/" + path + "'/0'/0/" + index);
+        var privateKey = childKey.privateKey.toString('hex');
+        return this.addByPrivateKey(privateKey);
+    };
+    /**
+     * Add an account using privateKey
+     *
+     * @param  {string} privateKey - privateKey to add
+     * @return {Account} return added Account
+     *
+     * @example
+     * ```javascript
+     * const wallet = new Wallet(customMessenger);
+     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
+     * console.log(wallet.addByPrivateKey(key_1));
+     * ```
+     */
+    Wallet.prototype.addByPrivateKey = function (privateKey) {
+        try {
+            var newAcc = account_1.Account.add(privateKey);
+            newAcc.setMessenger(this.messenger);
+            if (newAcc.address) {
+                this.accountMap.set(newAcc.address, newAcc);
+                if (!this.defaultSigner) {
+                    this.setSigner(newAcc.address);
+                }
+                return newAcc;
+            }
+            else {
+                throw new Error('add account failed');
+            }
+        }
+        catch (error) {
+            throw error;
+        }
+    };
+    /**
+     * Add an account using privateKey
+     * @param  {string} keyStore - keystore jsonString to add
+     * @param  {string} password - password to decrypt the file
+     * @return {Account} return added Account
+     */
+    Wallet.prototype.addByKeyStore = function (keyStore, password) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var newAcc, result, error_1;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        newAcc = new account_1.Account(undefined);
+                        return [4 /*yield*/, newAcc.fromFile(keyStore, password)];
+                    case 1:
+                        result = _a.sent();
+                        result.setMessenger(this.messenger);
+                        if (result.address) {
+                            this.accountMap.set(result.address, result);
+                            if (!this.defaultSigner) {
+                                this.setSigner(result.address);
+                            }
+                            return [2 /*return*/, result];
+                        }
+                        else {
+                            throw new Error('add account failed');
+                        }
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_1 = _a.sent();
+                        throw error_1;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * create a new account using Mnemonic
+     * @return {Account} {description}
+     *
+     * @example
+     * ```javascript
+     * console.log(wallet.accounts);
+     * wallet.createAccount();
+     * wallet.createAccount();
+     *
+     * console.log(wallet.accounts);
+     * ````
+     */
+    Wallet.prototype.createAccount = function (password, options) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var prv, acc, encrypted;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        prv = crypto_1.generatePrivateKey();
+                        acc = this.addByPrivateKey(prv);
+                        if (!(acc.address && password)) return [3 /*break*/, 2];
+                        return [4 /*yield*/, this.encryptAccount(acc.address, password, options)];
+                    case 1:
+                        encrypted = _a.sent();
+                        return [2 /*return*/, encrypted];
+                    case 2:
+                        if (acc.address && !password) {
+                            return [2 /*return*/, acc];
+                        }
+                        else {
+                            throw new Error('create acount failed');
+                        }
+                        _a.label = 3;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * To encrypt an account that lives in the wallet.
+     * if encrypted, returns original one, if not found, throw error
+     * @param {string} address - address in accounts
+     * @param {string} password - string that used to encrypt
+     * @param {EncryptOptions} options - encryption options
+     * @return {Promise<Account>}
+     *
+     * @example
+     * ```javascript
+     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
+     * wallet.addByPrivateKey(key_1);
+     * wallet.encryptAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7', '12345').then((value) => {
+     *   console.log(value);
+     * })
+     * ```
+     */
+    Wallet.prototype.encryptAccount = function (address, password, options) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var foundAcc, error_2;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 4, , 5]);
+                        foundAcc = this.getAccount(address);
+                        if (!(foundAcc && foundAcc.privateKey && utils_1.isPrivateKey(foundAcc.privateKey))) return [3 /*break*/, 2];
+                        return [4 /*yield*/, foundAcc.toFile(password, options)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, foundAcc];
+                    case 2:
+                        if (foundAcc && foundAcc.privateKey && !utils_1.isPrivateKey(foundAcc.privateKey)) {
+                            return [2 /*return*/, foundAcc];
+                        }
+                        else {
+                            throw new Error('encrypt account failed');
+                        }
+                        _a.label = 3;
+                    case 3: return [3 /*break*/, 5];
+                    case 4:
+                        error_2 = _a.sent();
+                        throw error_2;
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * To decrypt an account that lives in the wallet,if not encrypted, return original,
+     * if not found, throw error
+     * @param {string} address - address in accounts
+     * @param {string} password - string that used to encrypt
+     * @return {Promise<Account>}
+     *
+     * @example
+     * ```javascript
+     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
+     * wallet.addByPrivateKey(key_1);
+     * wallet.encryptAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7', '12345')
+     * .then(() => {
+     *   wallet.decryptAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7', '12345')
+     *   .then((value) =>{
+     *      console.log(value);
+     *   });
+     * });
+     * ```
+     */
+    Wallet.prototype.decryptAccount = function (address, password) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var foundAcc, error_3;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 4, , 5]);
+                        foundAcc = this.getAccount(address);
+                        if (!(foundAcc && foundAcc.privateKey && !utils_1.isPrivateKey(foundAcc.privateKey))) return [3 /*break*/, 2];
+                        return [4 /*yield*/, foundAcc.fromFile(foundAcc.privateKey, password)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, foundAcc];
+                    case 2:
+                        if (foundAcc && foundAcc.privateKey && utils_1.isPrivateKey(foundAcc.privateKey)) {
+                            foundAcc.encrypted = false;
+                            return [2 /*return*/, foundAcc];
+                        }
+                        else {
+                            throw new Error('decrypt account failed');
+                        }
+                        _a.label = 3;
+                    case 3: return [3 /*break*/, 5];
+                    case 4:
+                        error_3 = _a.sent();
+                        throw error_3;
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Get Account instance using address as param
+     * @param  {string} address - address hex
+     * @return {Account} Account instance which lives in Wallet
+     *
+     * @example
+     * ```
+     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
+     * wallet.addByPrivateKey(key_1);
+     * console.log(wallet.getAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7'));
+     * ```
+     */
+    Wallet.prototype.getAccount = function (address) {
+        return this.accountMap.get(crypto_1.getAddress(address).basicHex);
+    };
+    /**
+     * @function removeAccount
+     * @memberof Wallet
+     * @description remove Account using address as param
+     * @param  {string} address: - address hex
+     */
+    Wallet.prototype.removeAccount = function (address) {
+        this.accountMap.delete(crypto_1.getAddress(address).basicHex);
+        if (this.defaultSigner === address) {
+            this.defaultSigner = undefined;
+        }
+    };
+    /**
+     * Set Customer Messenage
+     * @param messenger
+     *
+     * @example
+     * ```javascript
+     * const customMessenger = new Messenger(
+     *   new HttpProvider('https://api.s0.b.hmny.io'),
+     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
+     *   ChainID.HmyLocal, // check if the chainId is correct
+     * )
+     * const wallet = new Wallet();
+     * wallet.setMessenger(customMessenger);
+     * console.log(wallet.messenger);
+     * ```
+     */
+    Wallet.prototype.setMessenger = function (messenger) {
+        this.messenger = messenger;
+    };
+    /**
+     * Set signer
+     *
+     * @param address one of the address in the accounts
+     */
+    Wallet.prototype.setSigner = function (address) {
+        if (!utils_1.isAddress(address) && !this.getAccount(address)) {
+            throw new Error('could not set signer');
+        }
+        this.defaultSigner = address;
+    };
+    Wallet.prototype.signTransaction = function (transaction, account, 
+    // tslint:disable-next-line: no-unnecessary-initializer
+    password, updateNonce, encodeMode, blockNumber) {
+        if (account === void 0) { account = this.signer; }
+        if (password === void 0) { password = undefined; }
+        if (updateNonce === void 0) { updateNonce = true; }
+        if (encodeMode === void 0) { encodeMode = 'rlp'; }
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var toSignWith, decrypted, signed, error_4, signed, error_5;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        toSignWith = account || this.signer;
+                        if (!toSignWith) {
+                            throw new Error('no signer found or did not provide correct account');
+                        }
+                        if (!(toSignWith instanceof account_1.Account && toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 7];
+                        if (!password) {
+                            throw new Error('must provide password to further execution');
+                        }
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 5, , 6]);
+                        return [4 /*yield*/, this.decryptAccount(toSignWith.address, password)];
+                    case 2:
+                        decrypted = _a.sent();
+                        return [4 /*yield*/, decrypted.signTransaction(transaction, updateNonce, encodeMode, blockNumber)];
+                    case 3:
+                        signed = _a.sent();
+                        return [4 /*yield*/, this.encryptAccount(toSignWith.address, password)];
+                    case 4:
+                        _a.sent();
+                        return [2 /*return*/, signed];
+                    case 5:
+                        error_4 = _a.sent();
+                        throw error_4;
+                    case 6: return [3 /*break*/, 13];
+                    case 7:
+                        if (!(toSignWith instanceof account_1.Account && !toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 12];
+                        _a.label = 8;
+                    case 8:
+                        _a.trys.push([8, 10, , 11]);
+                        return [4 /*yield*/, toSignWith.signTransaction(transaction, updateNonce, encodeMode, blockNumber)];
+                    case 9:
+                        signed = _a.sent();
+                        return [2 /*return*/, signed];
+                    case 10:
+                        error_5 = _a.sent();
+                        throw error_5;
+                    case 11: return [3 /*break*/, 13];
+                    case 12: throw new Error('sign transaction failed');
+                    case 13: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Wallet.prototype.signStaking = function (staking, account, 
+    // tslint:disable-next-line: no-unnecessary-initializer
+    password, updateNonce, encodeMode, blockNumber, shardID) {
+        if (account === void 0) { account = this.signer; }
+        if (password === void 0) { password = undefined; }
+        if (updateNonce === void 0) { updateNonce = true; }
+        if (encodeMode === void 0) { encodeMode = 'rlp'; }
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        if (shardID === void 0) { shardID = this.messenger.currentShard; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var toSignWith, decrypted, signed, error_6, signed, error_7;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        toSignWith = account || this.signer;
+                        if (!toSignWith) {
+                            throw new Error('no signer found or did not provide correct account');
+                        }
+                        if (!(toSignWith instanceof account_1.Account && toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 7];
+                        if (!password) {
+                            throw new Error('must provide password to further execution');
+                        }
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 5, , 6]);
+                        return [4 /*yield*/, this.decryptAccount(toSignWith.address, password)];
+                    case 2:
+                        decrypted = _a.sent();
+                        return [4 /*yield*/, decrypted.signStaking(staking, updateNonce, encodeMode, blockNumber, shardID)];
+                    case 3:
+                        signed = _a.sent();
+                        return [4 /*yield*/, this.encryptAccount(toSignWith.address, password)];
+                    case 4:
+                        _a.sent();
+                        return [2 /*return*/, signed];
+                    case 5:
+                        error_6 = _a.sent();
+                        throw error_6;
+                    case 6: return [3 /*break*/, 13];
+                    case 7:
+                        if (!(toSignWith instanceof account_1.Account && !toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 12];
+                        _a.label = 8;
+                    case 8:
+                        _a.trys.push([8, 10, , 11]);
+                        return [4 /*yield*/, toSignWith.signStaking(staking, updateNonce, encodeMode, blockNumber, shardID)];
+                    case 9:
+                        signed = _a.sent();
+                        return [2 /*return*/, signed];
+                    case 10:
+                        error_7 = _a.sent();
+                        throw error_7;
+                    case 11: return [3 /*break*/, 13];
+                    case 12: throw new Error('sign transaction failed');
+                    case 13: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * @function isValidMnemonic
+     * @memberof Wallet
+     * @description check if Mnemonic is valid
+     * @param  {string} phrase - Mnemonic phrase
+     * @return {boolean}
+     * @ignore
+     */
+    Wallet.prototype.isValidMnemonic = function (phrase) {
+        if (phrase.trim().split(/\s+/g).length < 12) {
+            return false;
+        }
+        return crypto_1.bip39.validateMnemonic(phrase);
+    };
+    return Wallet;
+}());
+exports.Wallet = Wallet;
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","./account":"../node_modules/@harmony-js/account/dist/account.js","./utils":"../node_modules/@harmony-js/account/dist/utils.js"}],"../node_modules/@harmony-js/account/dist/types.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-account
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+
+},{}],"../node_modules/@harmony-js/account/dist/hdnode.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-account
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.HDNode = void 0;
+var tslib_1 = require("tslib");
+var crypto_1 = require("@harmony-js/crypto");
+var utils_1 = require("@harmony-js/utils");
+var network_1 = require("@harmony-js/network");
+var transaction_1 = require("@harmony-js/transaction");
+var account_1 = require("./account");
+var HDNode = /** @class */ (function () {
+    function HDNode(provider, menmonic, index, addressCount, shardID, chainType, chainId, gasLimit, gasPrice) {
+        if (provider === void 0) { provider = 'http://localhost:9500'; }
+        if (index === void 0) { index = 0; }
+        if (addressCount === void 0) { addressCount = 1; }
+        if (shardID === void 0) { shardID = 0; }
+        if (chainType === void 0) { chainType = utils_1.ChainType.Harmony; }
+        if (chainId === void 0) { chainId = utils_1.ChainID.Default; }
+        if (gasLimit === void 0) { gasLimit = '1000000'; }
+        if (gasPrice === void 0) { gasPrice = '2000000000'; }
+        this.provider = this.setProvider(provider);
+        this.shardID = shardID;
+        this.messenger = new network_1.Messenger(this.provider, chainType, chainId);
+        this.messenger.setDefaultShardID(this.shardID);
+        this.hdwallet = undefined;
+        this.addresses = [];
+        this.wallets = {};
+        this.path = chainType === utils_1.ChainType.Harmony ? utils_1.HDPath : "m/44'/60'/0'/0/";
+        this.index = index;
+        this.addressCount = addressCount;
+        this.getHdWallet(menmonic || HDNode.generateMnemonic());
+        this.gasLimit = gasLimit;
+        this.gasPrice = gasPrice;
+    }
+    HDNode.isValidMnemonic = function (phrase) {
+        if (phrase.trim().split(/\s+/g).length < 12) {
+            return false;
+        }
+        return crypto_1.bip39.validateMnemonic(phrase);
+    };
+    HDNode.generateMnemonic = function () {
+        return crypto_1.bip39.generateMnemonic();
+    };
+    HDNode.prototype.normalizePrivateKeys = function (mnemonic) {
+        if (Array.isArray(mnemonic)) {
+            return mnemonic;
+        }
+        else if (mnemonic && !mnemonic.includes(' ')) {
+            return [mnemonic];
+        }
+        else {
+            return false;
+        }
+    };
+    HDNode.prototype.setProvider = function (provider) {
+        if (utils_1.isHttp(provider) && typeof provider === 'string') {
+            return new network_1.HttpProvider(provider);
+        }
+        else if (provider instanceof network_1.HttpProvider) {
+            return provider;
+        }
+        else if (utils_1.isWs(provider) && typeof provider === 'string') {
+            return new network_1.WSProvider(provider);
+        }
+        else if (provider instanceof network_1.WSProvider) {
+            return provider;
+        }
+        else {
+            throw new Error('provider is not recognized');
+        }
+    };
+    HDNode.prototype.getHdWallet = function (mnemonic) {
+        if (!HDNode.isValidMnemonic(mnemonic)) {
+            throw new Error('Mnemonic invalid or undefined');
+        }
+        this.hdwallet = crypto_1.hdkey.fromMasterSeed(crypto_1.bip39.mnemonicToSeed(mnemonic));
+        for (var i = this.index; i < this.index + this.addressCount; i++) {
+            if (!this.hdwallet) {
+                throw new Error('hdwallet is not found');
+            }
+            var childKey = this.hdwallet.derive("" + this.path + i);
+            var prv = childKey.privateKey.toString('hex');
+            var account = new account_1.Account(prv);
+            var addr = account.checksumAddress;
+            this.addresses.push(addr);
+            this.wallets[addr] = account;
+        }
+    };
+    // tslint:disable-next-line: ban-types
+    HDNode.prototype.getAccounts = function (cb) {
+        if (cb) {
+            cb(null, this.addresses);
+        }
+        return this.addresses;
+    };
+    // tslint:disable-next-line: ban-types
+    HDNode.prototype.getPrivateKey = function (address, cb) {
+        if (!cb) {
+            if (!this.wallets[address]) {
+                throw new Error('Account not found');
+            }
+            else {
+                return this.wallets[address].privateKey;
+            }
+        }
+        if (!this.wallets[address]) {
+            return cb('Account not found');
+        }
+        else {
+            cb(null, this.wallets[address].privateKey);
+        }
+    };
+    // tslint:disable-next-line: ban-types
+    HDNode.prototype.signTransaction = function (txParams) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var from, accountNonce, to, gasLimit, gasPrice, value, nonce, data, prv, signerAccount, tx, signed;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        from = txParams.from ? crypto_1.getAddress(txParams.from).checksum : '0x';
+                        return [4 /*yield*/, this.messenger.send('hmy_getTransactionCount', [from, 'latest'], 'hmy', this.shardID)];
+                    case 1:
+                        accountNonce = _a.sent();
+                        to = txParams.to ? crypto_1.getAddress(txParams.to).checksum : '0x';
+                        gasLimit = new utils_1.Unit('0').asWei().toWei();
+                        if (txParams.gas !== undefined && utils_1.isHex(txParams.gas)) {
+                            gasLimit = new utils_1.Unit(txParams.gas)
+                                .asWei()
+                                .toWei()
+                                .lt(new utils_1.Unit(this.gasLimit).asWei().toWei())
+                                ? new utils_1.Unit(txParams.gas).asWei().toWei()
+                                : new utils_1.Unit(this.gasLimit).asWei().toWei();
+                        }
+                        if (txParams.gasLimit !== undefined && utils_1.isHex(txParams.gasLimit)) {
+                            gasLimit = new utils_1.Unit(txParams.gasLimit)
+                                .asWei()
+                                .toWei()
+                                .lt(new utils_1.Unit(this.gasLimit).asWei().toWei())
+                                ? new utils_1.Unit(txParams.gasLimit).asWei().toWei()
+                                : new utils_1.Unit(this.gasLimit).asWei().toWei();
+                        }
+                        gasPrice = new utils_1.Unit('0').asWei().toWei();
+                        if (txParams.gasPrice !== undefined && utils_1.isHex(txParams.gasPrice)) {
+                            gasPrice = new utils_1.Unit(txParams.gasPrice)
+                                .asWei()
+                                .toWei()
+                                .lt(new utils_1.Unit(this.gasPrice).asWei().toWei())
+                                ? new utils_1.Unit(txParams.gasPrice).asWei().toWei()
+                                : new utils_1.Unit(this.gasPrice).asWei().toWei();
+                        }
+                        value = txParams.value !== undefined && utils_1.isHex(txParams.value) ? txParams.value : '0';
+                        nonce = txParams.nonce !== undefined && utils_1.isHex(txParams.nonce)
+                            ? Number.parseInt(utils_1.hexToNumber(txParams.nonce), 10)
+                            : Number.parseInt(utils_1.hexToNumber(accountNonce.result), 10);
+                        data = txParams.data !== undefined && utils_1.isHex(txParams.data) ? txParams.data : '0x';
+                        prv = this.wallets[from].privateKey;
+                        signerAccount = new account_1.Account(prv, this.messenger);
+                        tx = new transaction_1.Transaction(tslib_1.__assign(tslib_1.__assign({}, txParams), { from: from,
+                            to: to,
+                            gasLimit: gasLimit,
+                            gasPrice: gasPrice,
+                            value: value,
+                            nonce: nonce,
+                            data: data, shardID: this.shardID, chainId: this.messenger.chainId }), this.messenger, transaction_1.TxStatus.INTIALIZED);
+                        return [4 /*yield*/, signerAccount.signTransaction(tx)];
+                    case 2:
+                        signed = _a.sent();
+                        return [2 /*return*/, signed.getRawTransaction()];
+                }
+            });
+        });
+    };
+    HDNode.prototype.getAddress = function (idx) {
+        if (!idx) {
+            return this.addresses[0];
+        }
+        else {
+            return this.addresses[idx];
+        }
+    };
+    HDNode.prototype.getAddresses = function () {
+        return this.addresses;
+    };
+    HDNode.prototype.addByPrivateKey = function (privateKey) {
+        var account = new account_1.Account(privateKey);
+        var addr = account.checksumAddress;
+        this.addresses.push(addr);
+        this.wallets[addr] = account;
+        return addr;
+    };
+    HDNode.prototype.setSigner = function (address) {
+        var foundIndex = this.addresses.findIndex(function (value) { return value === address; });
+        this.addresses.slice(foundIndex, foundIndex + 1);
+        this.addresses.unshift(address);
+    };
+    return HDNode;
+}());
+exports.HDNode = HDNode;
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","@harmony-js/transaction":"../node_modules/@harmony-js/transaction/dist/index.js","./account":"../node_modules/@harmony-js/account/dist/account.js"}],"../node_modules/@harmony-js/account/dist/index.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-account
+ * @ignore
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+var tslib_1 = require("tslib");
+tslib_1.__exportStar(require("./account"), exports);
+tslib_1.__exportStar(require("./wallet"), exports);
+tslib_1.__exportStar(require("./types"), exports);
+tslib_1.__exportStar(require("./utils"), exports);
+tslib_1.__exportStar(require("./hdnode"), exports);
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","./account":"../node_modules/@harmony-js/account/dist/account.js","./wallet":"../node_modules/@harmony-js/account/dist/wallet.js","./types":"../node_modules/@harmony-js/account/dist/types.js","./utils":"../node_modules/@harmony-js/account/dist/utils.js","./hdnode":"../node_modules/@harmony-js/account/dist/hdnode.js"}],"../node_modules/@harmony-js/contract/dist/models/AbiItemModel.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AbiItem = void 0;
+var utils_1 = require("@harmony-js/utils");
+var AbiItem = /** @class */ (function () {
+    // constructor
+    function AbiItem(abiItem) {
+        this.abiItem = abiItem;
+        this.signature = this.abiItem.signature;
+        this.name = this.abiItem.name;
+        this.payable = this.abiItem.payable;
+        this.anonymous = this.abiItem.anonymous;
+        this.type = this.abiItem.type;
+        this.inputs = this.abiItem.inputs;
+        this.outputs = this.abiItem.outputs;
+        this.contractMethodParameters = [];
+    }
+    AbiItem.prototype.getInputLength = function () {
+        if (utils_1.isArray(this.abiItem.inputs)) {
+            return this.abiItem.inputs.length;
+        }
+        return 0;
+    };
+    AbiItem.prototype.getInputs = function () {
+        if (utils_1.isArray(this.abiItem.inputs)) {
+            return this.abiItem.inputs;
+        }
+        return [];
+    };
+    AbiItem.prototype.getOutputs = function () {
+        if (utils_1.isArray(this.abiItem.outputs)) {
+            return this.abiItem.outputs;
+        }
+        return [];
+    };
+    AbiItem.prototype.getIndexedInputs = function () {
+        return this.getInputs().filter(function (input) {
+            return input.indexed === true;
+        });
+    };
+    AbiItem.prototype.isOfType = function (type) {
+        return this.abiItem.type === type;
+    };
+    return AbiItem;
+}());
+exports.AbiItem = AbiItem;
+
+},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/models/AbiModel.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AbiModel = void 0;
+var AbiModel = /** @class */ (function () {
+    function AbiModel(mappedAbi) {
+        this.abi = mappedAbi;
+    }
+    AbiModel.prototype.getMethod = function (name) {
+        if (this.hasMethod(name)) {
+            return this.abi.methods[name];
+        }
+        return false;
+    };
+    AbiModel.prototype.getMethods = function () {
+        return this.abi.methods;
+    };
+    AbiModel.prototype.getEvent = function (name) {
+        if (this.hasEvent(name)) {
+            return this.abi.events[name];
+        }
+        return false;
+    };
+    AbiModel.prototype.getEvents = function () {
+        return this.abi.events;
+    };
+    AbiModel.prototype.getEventBySignature = function (signature) {
+        var _this = this;
+        var event;
+        Object.keys(this.abi.events).forEach(function (key) {
+            if (_this.abi.events[key].signature === signature) {
+                event = _this.abi.events[key];
+            }
+        });
+        return event;
+    };
+    AbiModel.prototype.hasMethod = function (name) {
+        return typeof this.abi.methods[name] !== 'undefined';
+    };
+    AbiModel.prototype.hasEvent = function (name) {
+        return typeof this.abi.events[name] !== 'undefined';
+    };
+    return AbiModel;
+}());
+exports.AbiModel = AbiModel;
+
+},{}],"../node_modules/@harmony-js/contract/dist/utils/mapper.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isPayable = exports.isConstant = exports.abiMapper = void 0;
+var utils_1 = require("@harmony-js/utils");
+var AbiItemModel_1 = require("../models/AbiItemModel");
+var AbiModel_1 = require("../models/AbiModel");
+var utils_2 = require("../abi/utils");
+exports.abiMapper = function (abi, abiCoder) {
+    var mappedAbiItems = {
+        methods: {},
+        events: {},
+    };
+    var hasConstructor = false;
+    abi.forEach(function (abiItem) {
+        abiItem.constant = exports.isConstant(abiItem);
+        abiItem.payable = exports.isPayable(abiItem);
+        if (abiItem.name) {
+            abiItem.funcName = utils_2.jsonInterfaceMethodToString(abiItem);
+        }
+        var abiItemModel;
+        if (abiItem.type === 'function') {
+            abiItem.signature = abiCoder.encodeFunctionSignature(abiItem.funcName);
+            abiItemModel = new AbiItemModel_1.AbiItem(abiItem);
+            // Check if an method already exists with this name and if it exists than create an array and push this abiItem
+            // into it. This will be used if there are methods with the same name but with different arguments.
+            if (!mappedAbiItems.methods[abiItem.name]) {
+                mappedAbiItems.methods[abiItem.name] = abiItemModel;
+            }
+            else {
+                if (utils_1.isArray(mappedAbiItems.methods[abiItem.name])) {
+                    mappedAbiItems.methods[abiItem.name].push(abiItemModel);
+                }
+                else {
+                    mappedAbiItems.methods[abiItem.name] = [
+                        mappedAbiItems.methods[abiItem.name],
+                        abiItemModel,
+                    ];
+                }
+            }
+            mappedAbiItems.methods[abiItem.signature] = abiItemModel;
+            mappedAbiItems.methods[abiItem.funcName] = abiItemModel;
+            return;
+        }
+        if (abiItem.type === 'event') {
+            abiItem.signature = abiCoder.encodeEventSignature(abiItem.funcName);
+            abiItemModel = new AbiItemModel_1.AbiItem(abiItem);
+            if (!mappedAbiItems.events[abiItem.name] ||
+                mappedAbiItems.events[abiItem.name].name === 'bound ') {
+                mappedAbiItems.events[abiItem.name] = abiItemModel;
+            }
+            mappedAbiItems.events[abiItem.signature] = abiItemModel;
+            mappedAbiItems.events[abiItem.funcName] = abiItemModel;
+        }
+        if (abiItem.type === 'constructor') {
+            abiItem.signature = abiItem.type;
+            // tslint:disable-next-line: no-string-literal
+            mappedAbiItems.methods['contractConstructor'] = new AbiItemModel_1.AbiItem(abiItem);
+            hasConstructor = true;
+        }
+    });
+    if (!hasConstructor) {
+        // tslint:disable-next-line: no-string-literal
+        mappedAbiItems.methods['contractConstructor'] = new AbiItemModel_1.AbiItem({
+            inputs: [],
+            payable: false,
+            constant: false,
+            type: 'constructor',
+        });
+    }
+    return new AbiModel_1.AbiModel(mappedAbiItems);
+};
+exports.isConstant = function (abiItem) {
+    return (abiItem.stateMutability === 'view' || abiItem.stateMutability === 'pure' || abiItem.constant);
+};
+exports.isPayable = function (abiItem) {
+    return abiItem.stateMutability === 'payable' || abiItem.payable;
+};
+
+},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","../models/AbiItemModel":"../node_modules/@harmony-js/contract/dist/models/AbiItemModel.js","../models/AbiModel":"../node_modules/@harmony-js/contract/dist/models/AbiModel.js","../abi/utils":"../node_modules/@harmony-js/contract/dist/abi/utils.js"}],"../node_modules/@harmony-js/contract/dist/utils/encoder.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.eventFilterEncoder = exports.methodEncoder = void 0;
+var utils_1 = require("@harmony-js/utils");
+exports.methodEncoder = function (abiCoder, abiItemModel, deployData) {
+    var encodedParameters = abiCoder.encodeParameters(abiItemModel.getInputs(), abiItemModel.contractMethodParameters);
+    if (encodedParameters.startsWith('0x')) {
+        encodedParameters = encodedParameters.slice(2);
+    }
+    if (abiItemModel.isOfType('constructor')) {
+        if (!deployData) {
+            throw new Error('The contract has no contract data option set. This is necessary to append the constructor parameters.');
+        }
+        return deployData + encodedParameters;
+    }
+    if (abiItemModel.isOfType('function')) {
+        return abiItemModel.signature + encodedParameters;
+    }
+    return encodedParameters;
+};
+exports.eventFilterEncoder = function (abiCoder, abiItemModel, filter) {
+    var topics = [];
+    abiItemModel.getIndexedInputs().forEach(function (input) {
+        if (filter[input.name]) {
+            var filterItem = filter[input.name];
+            if (utils_1.isArray(filterItem)) {
+                filterItem = filterItem.map(function (item) {
+                    return abiCoder.encodeParameter(input.type, item);
+                });
+                topics.push(filterItem);
+                return;
+            }
+            topics.push(abiCoder.encodeParameter(input.type, filterItem));
+            return;
+        }
+        topics.push(null);
+    });
+    return topics;
+};
+
+},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/utils/status.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ContractStatus = void 0;
+var ContractStatus;
+(function (ContractStatus) {
+    ContractStatus["INITIALISED"] = "initialised";
+    ContractStatus["TESTED"] = "tested";
+    ContractStatus["ERROR"] = "error";
+    ContractStatus["SIGNED"] = "signed";
+    ContractStatus["SENT"] = "sent";
+    ContractStatus["REJECTED"] = "rejected";
+    ContractStatus["DEPLOYED"] = "deployed";
+    ContractStatus["CALLED"] = "called";
+})(ContractStatus = exports.ContractStatus || (exports.ContractStatus = {}));
+
+},{}],"../node_modules/@harmony-js/contract/dist/methods/method.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ContractMethod = void 0;
+var tslib_1 = require("tslib");
+var transaction_1 = require("@harmony-js/transaction");
+var network_1 = require("@harmony-js/network");
+var utils_1 = require("@harmony-js/utils");
+var crypto_1 = require("@harmony-js/crypto");
+var encoder_1 = require("../utils/encoder");
+var status_1 = require("../utils/status");
+// todo: have to judge if it is contractConstructor
+var ContractMethod = /** @class */ (function () {
+    function ContractMethod(methodKey, params, abiItem, contract) {
+        this.methodKey = methodKey;
+        this.contract = contract;
+        this.wallet = contract.wallet;
+        this.params = params;
+        this.abiItem = abiItem;
+        this.transaction = this.createTransaction();
+        this.callPayload = undefined;
+        this.callResponse = undefined;
+    }
+    ContractMethod.prototype.send = function (params) {
+        var _this = this;
+        try {
+            var gasLimit_1;
+            var signTxs_1 = function () {
+                _this.transaction = _this.transaction.map(function (tx) {
+                    return tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, tx), params), { gasLimit: gasLimit_1 });
+                });
+                var waitConfirm = params && params.waitConfirm === false ? false : true;
+                var updateNonce = params && params.nonce !== undefined ? false : true;
+                _this.signTransaction(updateNonce)
+                    .then(function (signed) {
+                    _this.sendTransaction(signed).then(function (sent) {
+                        var _a = tslib_1.__read(sent, 2), txn = _a[0], id = _a[1];
+                        _this.transaction = txn;
+                        _this.contract.transaction = _this.transaction;
+                        if (_this.transaction.isRejected()) {
+                            _this.transaction.emitter.reject(id); // in this case, id is error message
+                        }
+                        else if (waitConfirm) {
+                            _this.confirm(id).then(function () {
+                                _this.transaction.emitter.resolve(_this.contract);
+                            });
+                        }
+                        else {
+                            _this.transaction.emitter.resolve(_this.contract);
+                        }
+                    });
+                })
+                    .catch(function (error) {
+                    _this.transaction.emitter.reject(error);
+                });
+            };
+            // tslint:disable-next-line: prefer-conditional-expression
+            if (params !== undefined) {
+                gasLimit_1 = params.gas || params.gasLimit;
+            }
+            if (gasLimit_1 === undefined) {
+                this.estimateGas().then(function (gas) {
+                    gasLimit_1 = utils_1.hexToBN(gas);
+                    signTxs_1();
+                });
+            }
+            else {
+                signTxs_1();
+            }
+            return this.transaction.emitter;
+        }
+        catch (error) {
+            throw error;
+        }
+    };
+    ContractMethod.prototype.call = function (options, blockNumber) {
+        if (blockNumber === void 0) { blockNumber = 'latest'; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var shardID, nonce_1, gasLimit_2, from_1, keys, txPayload, sendPayload, keys_1, keys_1_1, key, result, error_1;
+            var e_1, _a;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _b.trys.push([0, 2, , 3]);
+                        options = tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, this.contract.options), { data: this.transaction.txParams.data }), options);
+                        shardID = options !== undefined && options.shardID !== undefined
+                            ? options.shardID
+                            : this.contract.shardID;
+                        nonce_1 = '0x0';
+                        gasLimit_2 = '21000000';
+                        if (options !== undefined && (options.gas || options.gasLimit)) {
+                            gasLimit_2 = options.gas || options.gasLimit;
+                        }
+                        from_1 = this.wallet.signer
+                            ? this.wallet.signer.address
+                            : '0x0000000000000000000000000000000000000000';
+                        if (options && options.from) {
+                            from_1 = options.from;
+                        }
+                        this.transaction = this.transaction.map(function (tx) {
+                            return tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, tx), options), { from: from_1 || tx.from, gasPrice: options ? options.gasPrice : tx.gasPrice, gasLimit: gasLimit_2 || tx.gasLimit, nonce: Number.parseInt(utils_1.hexToNumber(nonce_1), 10) });
+                        });
+                        keys = Object.keys(this.transaction.txPayload);
+                        txPayload = this.transaction.txPayload;
+                        sendPayload = {};
+                        try {
+                            for (keys_1 = tslib_1.__values(keys), keys_1_1 = keys_1.next(); !keys_1_1.done; keys_1_1 = keys_1.next()) {
+                                key = keys_1_1.value;
+                                // tslint:disable-next-line: no-unused-expression
+                                if (txPayload[key] !== '0x') {
+                                    sendPayload[key] = txPayload[key];
+                                }
+                            }
+                        }
+                        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                        finally {
+                            try {
+                                if (keys_1_1 && !keys_1_1.done && (_a = keys_1.return)) _a.call(keys_1);
+                            }
+                            finally { if (e_1) throw e_1.error; }
+                        }
+                        // tslint:disable-line
+                        return [4 /*yield*/, this.wallet.messenger.send(network_1.RPCMethod.Call, [sendPayload, blockNumber], 
+                            // tslint:disable-line
+                            this.wallet.messenger.chainPrefix, shardID)];
+                    case 1:
+                        result = 
+                        // tslint:disable-line
+                        _b.sent();
+                        this.callPayload = sendPayload;
+                        this.callResponse = result;
+                        if (result.isError()) {
+                            throw result.message;
+                        }
+                        else if (result.isResult()) {
+                            if (result.result === null) {
+                                return [2 /*return*/, this.afterCall(undefined)];
+                            }
+                            else {
+                                return [2 /*return*/, this.afterCall(result.result)];
+                            }
+                        }
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_1 = _b.sent();
+                        throw error_1;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    ContractMethod.prototype.estimateGas = function (params) {
+        if (params === void 0) { params = {}; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var result, _a, error_2;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _b.trys.push([0, 2, , 3]);
+                        if (params.from === undefined && this.contract.options.from !== undefined) {
+                            params.from = this.contract.options.from;
+                        }
+                        if (params.to === undefined && this.transaction.txParams.to !== undefined) {
+                            params.to = this.transaction.txParams.to;
+                        }
+                        if (params.data === undefined) {
+                            params.data = this.transaction.txParams.data;
+                        }
+                        if (params.gasPrice === undefined && this.contract.options.gasPrice !== undefined) {
+                            params.gasPrice = this.contract.options.gasPrice;
+                        }
+                        if (this.methodKey === 'contractConstructor') {
+                            delete params.to;
+                        }
+                        _a = network_1.getResultForData;
+                        // tslint:disable-line
+                        return [4 /*yield*/, this.wallet.messenger.send(network_1.RPCMethod.EstimateGas, [params])];
+                    case 1:
+                        result = _a.apply(void 0, [
+                            // tslint:disable-line
+                            _b.sent()]);
+                        if (result.responseType === 'error') {
+                            throw result.message;
+                        }
+                        else if (result.responseType === 'raw') {
+                            throw new Error('Get estimateGas fail');
+                        }
+                        else {
+                            return [2 /*return*/, result];
+                        }
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_2 = _b.sent();
+                        throw error_2;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    ContractMethod.prototype.encodeABI = function () {
+        return encoder_1.methodEncoder(this.contract.abiCoder, this.abiItem, this.contract.data);
+    };
+    ContractMethod.prototype.debug = function () {
+        return {
+            callResponse: this.callResponse,
+            callPayload: this.callPayload,
+        };
+    };
+    ContractMethod.prototype.signTransaction = function (updateNonce) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var signed, _a, error_3;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _b.trys.push([0, 5, , 6]);
+                        signed = void 0;
+                        if (!this.wallet.signer) return [3 /*break*/, 2];
+                        return [4 /*yield*/, this.wallet.signTransaction(this.transaction, this.wallet.signer, undefined, updateNonce, 'rlp', 'latest')];
+                    case 1:
+                        _a = _b.sent();
+                        return [3 /*break*/, 4];
+                    case 2: return [4 /*yield*/, this.wallet.signTransaction(this.transaction, updateNonce, 'rlp', 'latest')];
+                    case 3:
+                        _a = _b.sent();
+                        _b.label = 4;
+                    case 4:
+                        signed = _a;
+                        if (this.methodKey === 'contractConstructor') {
+                            this.contract.address = transaction_1.TransactionFactory.getContractAddress(signed);
+                        }
+                        this.contract.setStatus(status_1.ContractStatus.SIGNED);
+                        return [2 /*return*/, signed];
+                    case 5:
+                        error_3 = _b.sent();
+                        throw error_3;
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    ContractMethod.prototype.sendTransaction = function (signed) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var result, error_4;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, signed.sendTransaction()];
+                    case 1:
+                        result = _a.sent();
+                        this.contract.setStatus(status_1.ContractStatus.SENT);
+                        return [2 /*return*/, result];
+                    case 2:
+                        error_4 = _a.sent();
+                        throw error_4;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    ContractMethod.prototype.confirm = function (id) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var result, error_5;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, this.transaction.confirm(id, 20, 1000, this.transaction ? this.transaction.txParams.shardID : this.contract.shardID)];
+                    case 1:
+                        result = _a.sent();
+                        if (result.receipt && result.txStatus === transaction_1.TxStatus.CONFIRMED) {
+                            if (this.methodKey === 'contractConstructor') {
+                                this.contract.setStatus(status_1.ContractStatus.DEPLOYED);
+                            }
+                            else {
+                                this.contract.setStatus(status_1.ContractStatus.CALLED);
+                            }
+                        }
+                        else {
+                            this.contract.setStatus(status_1.ContractStatus.REJECTED);
+                        }
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_5 = _a.sent();
+                        throw error_5;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    ContractMethod.prototype.createTransaction = function () {
+        if (this.wallet.messenger) {
+            if (this.methodKey === 'contractConstructor') {
+                // tslint:disable-next-line: no-string-literal
+                this.contract.data = this.params[0]['data'] || '0x';
+                this.abiItem.contractMethodParameters =
+                    // tslint:disable-next-line: no-string-literal
+                    this.params[0]['arguments'] || [];
+            }
+            else {
+                this.abiItem.contractMethodParameters = this.params || [];
+            }
+            var txObject = tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, this.contract.options), this.params[0]), { to: this.methodKey === 'contractConstructor'
+                    ? '0x'
+                    : crypto_1.getAddress(this.contract.address).checksum, data: this.encodeABI() });
+            // tslint:disable-line
+            var result = new transaction_1.TransactionFactory(this.wallet.messenger).newTx(txObject);
+            return result;
+        }
+        else {
+            throw new Error('Messenger is not found');
+        }
+    };
+    ContractMethod.prototype.afterCall = function (response) {
+        // length of `0x${methodSig}` is 2+4*2=10
+        if (response.length % 32 === 10 && response.startsWith(this.contract.errorFuncSig)) {
+            var errmsg = this.contract.abiCoder.decodeParameters([{ type: 'string' }], '0x' + response.slice(10));
+            throw { revert: errmsg[0] };
+        }
+        if (this.methodKey === 'contractConstructor') {
+            return response;
+        }
+        var outputs = this.abiItem.getOutputs();
+        if (outputs.length === 0) {
+            // if outputs is empty, we can't know the call is revert or not
+            return response;
+        }
+        if (!response || response === '0x') {
+            // if outputs isn't empty, treat it as revert
+            throw { revert: response };
+        }
+        if (outputs.length > 1) {
+            return this.contract.abiCoder.decodeParameters(outputs, response);
+        }
+        return this.contract.abiCoder.decodeParameter(outputs[0], response);
+        // return outputs;
+    };
+    return ContractMethod;
+}());
+exports.ContractMethod = ContractMethod;
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/transaction":"../node_modules/@harmony-js/transaction/dist/index.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","../utils/encoder":"../node_modules/@harmony-js/contract/dist/utils/encoder.js","../utils/status":"../node_modules/@harmony-js/contract/dist/utils/status.js"}],"../node_modules/@harmony-js/contract/dist/methods/methodFactory.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MethodFactory = void 0;
+var method_1 = require("./method");
+var MethodFactory = /** @class */ (function () {
+    // constructor
+    function MethodFactory(contract) {
+        this.contract = contract;
+        this.abiModel = this.contract.abiModel;
+        this.abiCoder = this.contract.abiCoder;
+        this.methodKeys = this.mapMethodKeys();
+    }
+    MethodFactory.prototype.addMethodsToContract = function () {
+        var _this = this;
+        this.methodKeys.forEach(function (key) {
+            var newObject = {};
+            newObject[key] = function () {
+                var params = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    params[_i] = arguments[_i];
+                }
+                return new method_1.ContractMethod(key, params, _this.abiModel.getMethod(key), _this.contract);
+            };
+            Object.assign(_this.contract.methods, newObject);
+        });
+        return this.contract;
+    };
+    /**
+     * @function mapMethodKeys
+     * @return {string[]} {description}
+     */
+    MethodFactory.prototype.mapMethodKeys = function () {
+        return Object.keys(this.abiModel.abi.methods);
+    };
+    return MethodFactory;
+}());
+exports.MethodFactory = MethodFactory;
+
+},{"./method":"../node_modules/@harmony-js/contract/dist/methods/method.js"}],"../node_modules/@harmony-js/contract/dist/utils/decoder.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.decode = void 0;
+exports.decode = function (abiCoder, abiItemModel, response) {
+    var argumentTopics = response.topics;
+    if (!abiItemModel.anonymous) {
+        argumentTopics = response.topics.slice(1);
+    }
+    if (response.data === '0x') {
+        response.data = null;
+    }
+    response.returnValues = abiCoder.decodeLog(abiItemModel.getInputs(), response.data, argumentTopics);
+    response.event = abiItemModel.name;
+    response.signature = abiItemModel.signature;
+    response.raw = {
+        data: response.data,
+        topics: response.topics,
+    };
+    if (abiItemModel.anonymous || !response.topics[0]) {
+        response.signature = null;
+    }
+    delete response.data;
+    delete response.topics;
+    return response;
+};
+
+},{}],"../node_modules/@harmony-js/contract/dist/utils/formatter.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.toTopic = exports.inputAddressFormatter = exports.isPredefinedBlockNumber = exports.inputBlockNumberFormatter = exports.outputLogFormatter = exports.inputLogFormatter = void 0;
+var crypto_1 = require("@harmony-js/crypto");
+var utils_1 = require("@harmony-js/utils");
+var abiCoder_1 = require("../abi/abiCoder");
+exports.inputLogFormatter = function (options) {
+    if (options.fromBlock) {
+        options.fromBlock = exports.inputBlockNumberFormatter(options.fromBlock);
+    }
+    if (options.toBlock) {
+        options.toBlock = exports.inputBlockNumberFormatter(options.toBlock);
+    }
+    // make sure topics, get converted to hex
+    options.topics = options.topics || [];
+    options.topics = options.topics.map(function (topic) {
+        return utils_1.isArray(topic) ? topic.map(exports.toTopic) : exports.toTopic(topic);
+    });
+    if (options.address) {
+        if (utils_1.isArray(options.address)) {
+            options.address = options.address.map(function (addr) {
+                return exports.inputAddressFormatter(addr);
+            });
+        }
+        else {
+            options.address = exports.inputAddressFormatter(options.address);
+        }
+    }
+    return options;
+};
+/**
+ * Formats the output of a log
+ *
+ * @method outputLogFormatter
+ *
+ * @param {Object} log object
+ *
+ * @returns {Object} log
+ */
+exports.outputLogFormatter = function (log) {
+    // generate a custom log id
+    if (typeof log.blockHash === 'string' &&
+        typeof log.transactionHash === 'string' &&
+        typeof log.logIndex === 'string') {
+        var shaId = crypto_1.keccak256('0x' +
+            log.blockHash.replace('0x', '') +
+            log.transactionHash.replace('0x', '') +
+            log.logIndex.replace('0x', ''));
+        shaId.replace('0x', '').substr(0, 8);
+        log.id = "log_" + shaId;
+    }
+    else if (!log.id) {
+        log.id = null;
+    }
+    if (log.blockNumber !== null) {
+        log.blockNumber = utils_1.hexToBN(log.blockNumber).toNumber();
+    }
+    if (log.transactionIndex !== null) {
+        log.transactionIndex = utils_1.hexToBN(log.transactionIndex).toNumber();
+    }
+    if (log.logIndex !== null) {
+        log.logIndex = utils_1.hexToBN(log.logIndex).toNumber();
+    }
+    if (log.address) {
+        log.address = crypto_1.toChecksumAddress(log.address);
+    }
+    return log;
+};
+exports.inputBlockNumberFormatter = function (blockNumber) {
+    if (blockNumber === undefined || blockNumber === null || exports.isPredefinedBlockNumber(blockNumber)) {
+        return blockNumber;
+    }
+    if (crypto_1.isHexString(blockNumber)) {
+        if (utils_1.isString(blockNumber)) {
+            return blockNumber.toLowerCase();
+        }
+        return blockNumber;
+    }
+    return utils_1.numberToHex(blockNumber);
+};
+exports.isPredefinedBlockNumber = function (blockNumber) {
+    return blockNumber === 'latest' || blockNumber === 'pending' || blockNumber === 'earliest';
+};
+exports.inputAddressFormatter = function (address) {
+    if (utils_1.isAddress(address)) {
+        return "0x" + address.toLowerCase().replace('0x', '');
+    }
+    throw new Error("Provided address \"" + address + "\" is invalid, the capitalization checksum test failed, or its an indrect IBAN address which can't be converted.");
+};
+exports.toTopic = function (value) {
+    if (value === null || typeof value === 'undefined') {
+        return null;
+    }
+    value = String(value);
+    if (value.indexOf('0x') === 0) {
+        return value;
+    }
+    return crypto_1.hexlify(abiCoder_1.toUtf8Bytes(value));
+};
+
+},{"@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","../abi/abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js"}],"../node_modules/@harmony-js/contract/dist/events/event.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.EventMethod = void 0;
+var tslib_1 = require("tslib");
+var network_1 = require("@harmony-js/network");
+var decoder_1 = require("../utils/decoder");
+var formatter_1 = require("../utils/formatter");
+var EventMethod = /** @class */ (function (_super) {
+    tslib_1.__extends(EventMethod, _super);
+    function EventMethod(methodKey, params, abiItem, contract) {
+        var _this = _super.call(this, formatter_1.inputLogFormatter(params), contract.wallet.messenger, contract.shardID) || this;
+        _this.methodKey = methodKey;
+        _this.contract = contract;
+        _this.params = params;
+        _this.abiItem = abiItem;
+        return _this;
+        // this.subscribe();
+    }
+    // call() {}
+    // estimateGas() {}
+    // encodeABI() {}
+    EventMethod.prototype.onNewSubscriptionItem = function (subscriptionItem) {
+        var formatted = formatter_1.outputLogFormatter(subscriptionItem.method !== undefined ? subscriptionItem.params.result : subscriptionItem);
+        var log = decoder_1.decode(this.contract.abiCoder, this.abiItem, formatted);
+        if (log.removed && this.emitter) {
+            this.emitter.emit('changed', log);
+        }
+        return log;
+    };
+    return EventMethod;
+}(network_1.LogSub));
+exports.EventMethod = EventMethod;
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","../utils/decoder":"../node_modules/@harmony-js/contract/dist/utils/decoder.js","../utils/formatter":"../node_modules/@harmony-js/contract/dist/utils/formatter.js"}],"../node_modules/@harmony-js/contract/dist/events/eventFactory.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.EventFactory = void 0;
+var utils_1 = require("@harmony-js/utils");
+var event_1 = require("./event");
+var formatter_1 = require("../utils/formatter");
+var encoder_1 = require("../utils/encoder");
+var EventFactory = /** @class */ (function () {
+    // constructor
+    function EventFactory(contract) {
+        this.contract = contract;
+        this.abiModel = this.contract.abiModel;
+        this.abiCoder = this.contract.abiCoder;
+        this.eventKeys = this.mapEventKeys();
+    }
+    EventFactory.prototype.addEventsToContract = function () {
+        var _this = this;
+        this.eventKeys.forEach(function (key) {
+            var newObject = {};
+            newObject[key] = function (params) {
+                return new event_1.EventMethod(key, 
+                // params,
+                _this.map(_this.abiModel.getEvent(key), _this.contract, params), _this.abiModel.getEvent(key), _this.contract);
+            };
+            Object.assign(_this.contract.events, newObject);
+        });
+        return this.contract;
+    };
+    /**
+     * @function mapMethodKeys
+     * @return {string[]} {description}
+     */
+    EventFactory.prototype.mapEventKeys = function () {
+        return Object.keys(this.abiModel.abi.events);
+    };
+    EventFactory.prototype.map = function (abiItemModel, contract, options) {
+        if (!options) {
+            options = {};
+        }
+        if (!utils_1.isArray(options.topics)) {
+            options.topics = [];
+        }
+        if (typeof options.fromBlock !== 'undefined') {
+            options.fromBlock = formatter_1.inputBlockNumberFormatter(options.fromBlock);
+        }
+        // else if (contract.defaultBlock !== null) {
+        //   options.fromBlock = contract.defaultBlock;
+        // }
+        if (typeof options.toBlock !== 'undefined') {
+            options.toBlock = formatter_1.inputBlockNumberFormatter(options.toBlock);
+        }
+        if (typeof options.filter !== 'undefined') {
+            options.topics = options.topics.concat(encoder_1.eventFilterEncoder(this.abiCoder, abiItemModel, options.filter));
+            delete options.filter;
+        }
+        if (!abiItemModel.anonymous) {
+            options.topics.unshift(abiItemModel.signature);
+        }
+        if (!options.address) {
+            options.address = contract.address;
+        }
+        return options;
+    };
+    return EventFactory;
+}());
+exports.EventFactory = EventFactory;
+
+},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","./event":"../node_modules/@harmony-js/contract/dist/events/event.js","../utils/formatter":"../node_modules/@harmony-js/contract/dist/utils/formatter.js","../utils/encoder":"../node_modules/@harmony-js/contract/dist/utils/encoder.js"}],"../node_modules/@harmony-js/contract/dist/contract.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ *
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Contract = void 0;
+var account_1 = require("@harmony-js/account");
+var index_1 = require("./abi/index");
+var mapper_1 = require("./utils/mapper");
+var methodFactory_1 = require("./methods/methodFactory");
+var eventFactory_1 = require("./events/eventFactory");
+var status_1 = require("./utils/status");
+// class Contract
+var Contract = /** @class */ (function () {
+    function Contract(abi, address, options, wallet, status) {
+        if (abi === void 0) { abi = []; }
+        if (address === void 0) { address = '0x'; }
+        if (options === void 0) { options = {}; }
+        if (status === void 0) { status = status_1.ContractStatus.INITIALISED; }
+        this.abi = [];
+        this.errorFunc = 'Error(string)';
+        // super();
+        this.abi = abi;
+        this.abiCoder = index_1.AbiCoder();
+        this.abiModel = mapper_1.abiMapper(abi, this.abiCoder);
+        this.options = options;
+        this.address = this.options.address || address;
+        this.shardID = this.options.shardID || wallet.messenger.currentShard;
+        this.wallet = wallet;
+        this.methods = {};
+        this.events = {};
+        this.runMethodFactory();
+        this.runEventFactory();
+        this.status = status;
+        this.errorFuncSig = this.abiCoder.encodeFunctionSignature(this.errorFunc);
+        // tslint:disable-next-line: no-unused-expression
+    }
+    Contract.prototype.isInitialised = function () {
+        return this.status === status_1.ContractStatus.INITIALISED;
+    };
+    Contract.prototype.isSigned = function () {
+        return this.status === status_1.ContractStatus.SIGNED;
+    };
+    Contract.prototype.isSent = function () {
+        return this.status === status_1.ContractStatus.SENT;
+    };
+    Contract.prototype.isDeployed = function () {
+        return this.status === status_1.ContractStatus.DEPLOYED;
+    };
+    Contract.prototype.isRejected = function () {
+        return this.status === status_1.ContractStatus.REJECTED;
+    };
+    Contract.prototype.isCalled = function () {
+        return this.status === status_1.ContractStatus.CALLED;
+    };
+    Contract.prototype.setStatus = function (status) {
+        this.status = status;
+    };
+    Object.defineProperty(Contract.prototype, "jsonInterface", {
+        get: function () {
+            return this.abiModel;
+        },
+        set: function (value) {
+            this.abiModel = mapper_1.abiMapper(value, this.abiCoder);
+            this.runMethodFactory();
+            this.runEventFactory();
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(Contract.prototype, "address", {
+        get: function () {
+            return this.options.address || this.address;
+        },
+        set: function (value) {
+            this.options.address = value;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(Contract.prototype, "data", {
+        get: function () {
+            return this.options.data;
+        },
+        set: function (value) {
+            this.options.data = value;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    // deploy
+    Contract.prototype.deploy = function (options) {
+        return this.methods.contractConstructor(options);
+    };
+    Contract.prototype.runMethodFactory = function () {
+        return new methodFactory_1.MethodFactory(this).addMethodsToContract();
+    };
+    Contract.prototype.runEventFactory = function () {
+        return new eventFactory_1.EventFactory(this).addEventsToContract();
+    };
+    Contract.prototype.connect = function (wallet) {
+        this.wallet = wallet;
+    };
+    Contract.prototype.setMessegner = function (messenger) {
+        if (this.wallet instanceof account_1.Wallet) {
+            this.wallet.setMessenger(messenger);
+        }
+        else {
+            this.wallet.messenger = messenger;
+        }
+    };
+    return Contract;
+}());
+exports.Contract = Contract;
+
+},{"@harmony-js/account":"../node_modules/@harmony-js/account/dist/index.js","./abi/index":"../node_modules/@harmony-js/contract/dist/abi/index.js","./utils/mapper":"../node_modules/@harmony-js/contract/dist/utils/mapper.js","./methods/methodFactory":"../node_modules/@harmony-js/contract/dist/methods/methodFactory.js","./events/eventFactory":"../node_modules/@harmony-js/contract/dist/events/eventFactory.js","./utils/status":"../node_modules/@harmony-js/contract/dist/utils/status.js"}],"../node_modules/@harmony-js/contract/dist/contractFactory.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ContractFactory = void 0;
+var contract_1 = require("./contract");
+var ContractFactory = /** @class */ (function () {
+    function ContractFactory(wallet) {
+        this.wallet = wallet;
+    }
+    ContractFactory.prototype.createContract = function (abi, address, options) {
+        return new contract_1.Contract(abi, address, options, this.wallet);
+    };
+    return ContractFactory;
+}());
+exports.ContractFactory = ContractFactory;
+
+},{"./contract":"../node_modules/@harmony-js/contract/dist/contract.js"}],"../node_modules/@harmony-js/contract/dist/index.js":[function(require,module,exports) {
+"use strict";
+/**
+ * @packageDocumentation
+ * @module harmony-contract
+ * @hidden
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+var tslib_1 = require("tslib");
+tslib_1.__exportStar(require("./abi/index"), exports);
+var abiCoder_1 = require("./abi/abiCoder");
+Object.defineProperty(exports, "toUtf8Bytes", { enumerable: true, get: function () { return abiCoder_1.toUtf8Bytes; } });
+Object.defineProperty(exports, "toUtf8String", { enumerable: true, get: function () { return abiCoder_1.toUtf8String; } });
+Object.defineProperty(exports, "formatBytes32String", { enumerable: true, get: function () { return abiCoder_1.formatBytes32String; } });
+Object.defineProperty(exports, "parseBytes32String", { enumerable: true, get: function () { return abiCoder_1.parseBytes32String; } });
+var contract_1 = require("./contract");
+Object.defineProperty(exports, "Contract", { enumerable: true, get: function () { return contract_1.Contract; } });
+var contractFactory_1 = require("./contractFactory");
+Object.defineProperty(exports, "ContractFactory", { enumerable: true, get: function () { return contractFactory_1.ContractFactory; } });
+
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","./abi/index":"../node_modules/@harmony-js/contract/dist/abi/index.js","./abi/abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js","./contract":"../node_modules/@harmony-js/contract/dist/contract.js","./contractFactory":"../node_modules/@harmony-js/contract/dist/contractFactory.js"}],"../node_modules/text-encoding/lib/encoding-indexes.js":[function(require,module,exports) {
 var global = arguments[3];
 (function(global) {
   'use strict';
@@ -74232,4028 +78253,7 @@ var tslib_1 = require("tslib");
 tslib_1.__exportStar(require("./stakingTransaction"), exports);
 tslib_1.__exportStar(require("./factory"), exports);
 
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","./stakingTransaction":"../node_modules/@harmony-js/staking/dist/stakingTransaction.js","./factory":"../node_modules/@harmony-js/staking/dist/factory.js"}],"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js":[function(require,module,exports) {
-"use strict";
-/**
- * ## About this package
- *
- * `@harmony-js/contract` makes it easy to interact with smart contract on the Harmony Blockchain. This allows you to interact with smart contracts as if they were JavaScript objects.
- *
- * ## How to use this package
- *
- * ### Deploy a contract to blockchain
- * ```javascript
- * // Step 1: Use Solidity to build a sample contract instance
- * contract Inbox {
- *   string public message;
- *   constructor() public {
- *     message = "hello";
- *   }
- *   function setMessage(string memory newMessage) public {
- *     message = newMessage;
- *   }
- * }
- *
- * // Step 2: Use truffle to compile the contract
- * $ truffle compile
- *
- * // Step 3: Use truffle to deploy the contract (by truffle)
- * $ truffle migrate --network local --reset
- * $ truffle migrate --network testnet --reset
- * ```
- * [Tutorial: using truffle to compile and deploy smart-contract](https://github.com/harmony-one/HRC/tree/master/examples/dapp_Lottery)
- *
- * ### Interact with the contract
- * ```javascript
- * // Step 1: create a harmony instance
- * const { Harmony } = require('@harmony-js/core');
- * const { ChainID, ChainType } = require('@harmony-js/utils');
- * const hmy = new Harmony(
- *   // let's assume we deploy smart contract to this end-point URL
- *   'https://api.s0.b.hmny.io'
- *   {
- *     chainType: ChainType.Harmony,
- *     chainId: ChainID.HmyLocal,
- *   }
- * )
- *
- * // Step 2: get a contract instance
- * const getContractInstance = (hmy, artifact) => {
- *   return hmy.contracts.createContract(artifact.abi, address);
- * }
- * const inbox = getContractInstance(hmy, inboxJson)
- *
- * // Step 3: interact with the instance
- * // Example 1: methods.myMethod.call()
- * const message = await inbox.methods.message().call();
- * console.log(message);
- *
- * // Example 2: methods.myMethod.send()
- * inbox.methods.setMessage('666').send({
- *   gasLimit: '1000001',
- *   gasPrice: new hmy.utils.Unit('10').asGwei().toWei(),
- * });
- * ```
- *
- * ### Integrate MathWallet
- * Using MathWallet to sign Transaction
- * ```javascript
- * // Step 0: set up MathWallet extension on Chrome
- *
- * // Step 1: Create a harmonyExtension instance
- * const { Harmony, HarmonyExtension } = require('@harmony-js/core');
- * let hmyEx, ExContract;
- * export const initExtension = async() => {
- *   hmyEx = await new HarmonyExtension(window.harmony);
- *
- *   exContract = hmyEx.contracts.createContract(abi, address);
- *   return exContract;
- * };
- *
- * // Step 2: interact with hmyEx instance
- * // wait for hmy inject into window
- * async componentDidMount() {
- *   ...
- *   await waitForInjected()
- *   ...
- * }
- * // Example: methods.myMethod.send()
- * onSubmit = async event => {
- *   const exContract = await initExtension()
- *   await exContract.methods.Mymethod().send({
- *     value: new hmy.utils.Unit('1').asOne().toWei(),
- *   })
- * }
- *
- * // wait for injected
- * export const waitForInjected = () => new Promise((resolve) => {
- *   const check = () => {
- *     if (!window.harmony) setTimeout(check, 250);
- *     else resolve(window.harmony);
- *   }
- *   check();
- * });
- * ```
- *
- * ## [More Examples: HRC repo](https://github.com/harmony-one/HRC/tree/master/examples)
- * - Lottery
- * - HRC 20
- * - HRC 721
- * - Node-dao
- * - Node-faucet
- *
- * @packageDocumentation
- * @module harmony-contract
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.defaultAbiCoder = exports.AbiCoder = exports.deepCopy = exports.shallowCopy = exports.isType = exports.parseBytes32String = exports.formatBytes32String = exports.toUtf8String = exports.toUtf8Bytes = exports.UnicodeNormalizationForm = exports.parseSignature = exports.formatSignature = exports.formatParamType = exports.parseParamType = exports.defaultCoerceFunc = void 0;
-var tslib_1 = require("tslib");
-// this file is mainly ported from `ethers.js`, but done some fixes
-// 1. added bytesPadRight support
-// 2. ts-lint
-// 3. use BN as default Bignumber instance
-var crypto_1 = require("@harmony-js/crypto");
-var utils_1 = require("@harmony-js/utils");
-/** @hidden */
-var NegativeOne = new crypto_1.BN(-1);
-/** @hidden */
-var One = new crypto_1.BN(1);
-/** @hidden */
-var Zero = new crypto_1.BN(0);
-/** @hidden */
-var HashZero = '0x0000000000000000000000000000000000000000000000000000000000000000';
-/** @hidden */
-var MaxUint256 = utils_1.hexToBN('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
-///////////////////////////////
-/** @hidden */
-var paramTypeBytes = new RegExp(/^bytes([0-9]*)$/);
-/** @hidden */
-var paramTypeNumber = new RegExp(/^(u?int)([0-9]*)$/);
-/** @hidden */
-var paramTypeArray = new RegExp(/^(.*)\[([0-9]*)\]$/);
-/** @hidden */
-exports.defaultCoerceFunc = function (type, value) {
-    var match = type.match(paramTypeNumber);
-    if (match && parseInt(match[2], 10) <= 48) {
-        // return value.toNumber();
-        return value.toString('hex');
-    }
-    return value;
-};
-///////////////////////////////////
-// Parsing for Solidity Signatures
-///////////////////////////////////
-// Parsing for Solidity Signatures
-/** @hidden */
-var regexParen = new RegExp('^([^)(]*)\\((.*)\\)([^)(]*)$');
-/** @hidden */
-var regexIdentifier = new RegExp('^[A-Za-z_][A-Za-z0-9_]*$');
-/** @hidden */
-function verifyType(type) {
-    // These need to be transformed to their full description
-    if (type.match(/^uint($|[^1-9])/)) {
-        type = 'uint256' + type.substring(4);
-    }
-    else if (type.match(/^int($|[^1-9])/)) {
-        type = 'int256' + type.substring(3);
-    }
-    return type;
-}
-/** @hidden */
-function parseParam(param, allowIndexed) {
-    var originalParam = param;
-    // tslint:disable-next-line: no-shadowed-variable
-    function throwError(i) {
-        throw new Error('unexpected character "' +
-            originalParam[i] +
-            '" at position ' +
-            i +
-            ' in "' +
-            originalParam +
-            '"');
-    }
-    param = param.replace(/\s/g, ' ');
-    var parent = { type: '', name: '', state: { allowType: true } };
-    var node = parent;
-    for (var i = 0; i < param.length; i++) {
-        var c = param[i];
-        switch (c) {
-            case '(':
-                if (!node.state || !node.state.allowParams) {
-                    throwError(i);
-                }
-                if (node.state) {
-                    node.state.allowType = false;
-                }
-                if (node.type) {
-                    node.type = verifyType(node.type);
-                }
-                node.components = [{ type: '', name: '', parent: node, state: { allowType: true } }];
-                node = node.components[0];
-                break;
-            case ')':
-                delete node.state;
-                if (allowIndexed && node.name === 'indexed') {
-                    node.indexed = true;
-                    node.name = '';
-                }
-                if (node.type) {
-                    node.type = verifyType(node.type);
-                }
-                var child = node;
-                node = node.parent;
-                if (!node) {
-                    throwError(i);
-                }
-                delete child.parent;
-                if (node.state) {
-                    node.state.allowParams = false;
-                    node.state.allowName = true;
-                    node.state.allowArray = true;
-                }
-                break;
-            case ',':
-                delete node.state;
-                if (allowIndexed && node.name === 'indexed') {
-                    node.indexed = true;
-                    node.name = '';
-                }
-                if (node.type) {
-                    node.type = verifyType(node.type);
-                }
-                var sibling = {
-                    type: '',
-                    name: '',
-                    parent: node.parent,
-                    state: { allowType: true },
-                };
-                node.parent.components.push(sibling);
-                delete node.parent;
-                node = sibling;
-                break;
-            // Hit a space...
-            case ' ':
-                // If reading type, the type is done and may read a param or name
-                if (node.state) {
-                    if (node.state.allowType) {
-                        if (node.type !== '' && node.type) {
-                            node.type = verifyType(node.type);
-                            delete node.state.allowType;
-                            node.state.allowName = true;
-                            node.state.allowParams = true;
-                        }
-                    }
-                    // If reading name, the name is done
-                    if (node.state.allowName) {
-                        if (node.name !== '') {
-                            if (allowIndexed && node.name === 'indexed') {
-                                node.indexed = true;
-                                node.name = '';
-                            }
-                            else {
-                                node.state.allowName = false;
-                            }
-                        }
-                    }
-                }
-                break;
-            case '[':
-                if (!node.state || !node.state.allowArray) {
-                    throwError(i);
-                }
-                if (node.state) {
-                    node.type += c;
-                    node.state.allowArray = false;
-                    node.state.allowName = false;
-                    node.state.readArray = true;
-                }
-                break;
-            case ']':
-                if (!node.state || !node.state.readArray) {
-                    throwError(i);
-                }
-                if (node.state) {
-                    node.type += c;
-                    node.state.readArray = false;
-                    node.state.allowArray = true;
-                    node.state.allowName = true;
-                }
-                break;
-            default:
-                if (node.state) {
-                    if (node.state.allowType) {
-                        node.type += c;
-                        node.state.allowParams = true;
-                        node.state.allowArray = true;
-                    }
-                    else if (node.state.allowName) {
-                        node.name += c;
-                        delete node.state.allowArray;
-                    }
-                    else if (node.state.readArray) {
-                        node.type += c;
-                    }
-                    else {
-                        throwError(i);
-                    }
-                }
-        }
-    }
-    if (node.parent) {
-        throw new Error('unexpected eof');
-    }
-    delete parent.state;
-    if (allowIndexed && node.name === 'indexed') {
-        node.indexed = true;
-        node.name = '';
-    }
-    if (parent.type) {
-        parent.type = verifyType(parent.type);
-    }
-    return parent;
-}
-// @TODO: Better return type
-/** @hidden */
-function parseSignatureEvent(fragment) {
-    var abi = {
-        anonymous: false,
-        inputs: [],
-        name: '',
-        type: 'event',
-    };
-    var match = fragment.match(regexParen);
-    if (!match) {
-        throw new Error('invalid event: ' + fragment);
-    }
-    abi.name = match[1].trim();
-    splitNesting(match[2]).forEach(function (param) {
-        param = parseParam(param, true);
-        param.indexed = !!param.indexed;
-        abi.inputs.push(param);
-    });
-    match[3].split(' ').forEach(function (modifier) {
-        switch (modifier) {
-            case 'anonymous':
-                abi.anonymous = true;
-                break;
-            case '':
-                break;
-            default:
-                crypto_1.info('unknown modifier: ' + modifier);
-        }
-    });
-    if (abi.name && !abi.name.match(regexIdentifier)) {
-        throw new Error('invalid identifier: "' + abi.name + '"');
-    }
-    return abi;
-}
-/** @hidden */
-function parseParamType(type) {
-    return parseParam(type, true);
-}
-exports.parseParamType = parseParamType;
-// @TODO: Allow a second boolean to expose names
-/** @hidden */
-function formatParamType(paramType) {
-    return getParamCoder(exports.defaultCoerceFunc, paramType).type;
-}
-exports.formatParamType = formatParamType;
-/** @hidden */
-function parseSignatureFunction(fragment) {
-    var abi = {
-        constant: false,
-        gas: null,
-        inputs: [],
-        name: '',
-        outputs: [],
-        payable: false,
-        stateMutability: null,
-        type: 'function',
-    };
-    var comps = fragment.split('@');
-    if (comps.length !== 1) {
-        if (comps.length > 2) {
-            throw new Error('invalid signature');
-        }
-        if (!comps[1].match(/^[0-9]+$/)) {
-            throw new Error('invalid signature gas');
-        }
-        abi.gas = new crypto_1.BN(comps[1]);
-        fragment = comps[0];
-    }
-    comps = fragment.split(' returns ');
-    var left = comps[0].match(regexParen);
-    if (!left) {
-        throw new Error('invalid signature');
-    }
-    abi.name = left[1].trim();
-    if (!abi.name.match(regexIdentifier)) {
-        throw new Error('invalid identifier: "' + left[1] + '"');
-    }
-    splitNesting(left[2]).forEach(function (param) {
-        abi.inputs.push(parseParam(param));
-    });
-    left[3].split(' ').forEach(function (modifier) {
-        switch (modifier) {
-            case 'constant':
-                abi.constant = true;
-                break;
-            case 'payable':
-                abi.payable = true;
-                abi.stateMutability = 'payable';
-                break;
-            case 'pure':
-                abi.constant = true;
-                abi.stateMutability = 'pure';
-                break;
-            case 'view':
-                abi.constant = true;
-                abi.stateMutability = 'view';
-                break;
-            case 'external':
-            case 'public':
-            case '':
-                break;
-            default:
-                crypto_1.info('unknown modifier: ' + modifier);
-        }
-    });
-    // We have outputs
-    if (comps.length > 1) {
-        var right = comps[1].match(regexParen);
-        if (right === null || right[1].trim() !== '' || right[3].trim() !== '') {
-            throw new Error('unexpected tokens');
-        }
-        splitNesting(right[2]).forEach(function (param) {
-            abi.outputs.push(parseParam(param));
-        });
-    }
-    if (abi.name === 'constructor') {
-        abi.type = 'constructor';
-        if (abi.outputs.length) {
-            throw new Error('constructor may not have outputs');
-        }
-        delete abi.name;
-        delete abi.outputs;
-    }
-    return abi;
-}
-// @TODO: Allow a second boolean to expose names and modifiers
-/** @hidden */
-function formatSignature(fragment) {
-    return fragment.name + '(' + fragment.inputs.map(function (i) { return formatParamType(i); }).join(',') + ')';
-}
-exports.formatSignature = formatSignature;
-/** @hidden */
-function parseSignature(fragment) {
-    if (typeof fragment === 'string') {
-        // Make sure the "returns" is surrounded by a space and all whitespace is exactly one space
-        fragment = fragment.replace(/\s/g, ' ');
-        fragment = fragment
-            .replace(/\(/g, ' (')
-            .replace(/\)/g, ') ')
-            .replace(/\s+/g, ' ');
-        fragment = fragment.trim();
-        if (fragment.substring(0, 6) === 'event ') {
-            return parseSignatureEvent(fragment.substring(6).trim());
-        }
-        else {
-            if (fragment.substring(0, 9) === 'function ') {
-                fragment = fragment.substring(9);
-            }
-            return parseSignatureFunction(fragment.trim());
-        }
-    }
-    throw new Error('unknown signature');
-}
-exports.parseSignature = parseSignature;
-/** @hidden */
-var Coder = /** @class */ (function () {
-    function Coder(coerceFunc, name, type, localName, dynamic) {
-        this.coerceFunc = coerceFunc;
-        this.name = name;
-        this.type = type;
-        this.localName = localName;
-        this.dynamic = dynamic;
-    }
-    return Coder;
-}());
-// Clones the functionality of an existing Coder, but without a localName
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderAnonymous = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderAnonymous, _super);
-    function CoderAnonymous(coder) {
-        var _this = _super.call(this, coder.coerceFunc, coder.name, coder.type, undefined, coder.dynamic) || this;
-        _this.coder = coder;
-        return _this;
-    }
-    CoderAnonymous.prototype.encode = function (value) {
-        return this.coder.encode(value);
-    };
-    CoderAnonymous.prototype.decode = function (data, offset) {
-        return this.coder.decode(data, offset);
-    };
-    return CoderAnonymous;
-}(Coder));
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderNull = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderNull, _super);
-    function CoderNull(coerceFunc, localName) {
-        return _super.call(this, coerceFunc, 'null', '', localName, false) || this;
-    }
-    CoderNull.prototype.encode = function (value) {
-        var result = crypto_1.arrayify([]) || new Uint8Array();
-        return result;
-    };
-    CoderNull.prototype.decode = function (data, offset) {
-        if (offset > data.length) {
-            throw new Error('invalid null');
-        }
-        return {
-            consumed: 0,
-            value: this.coerceFunc('null', undefined),
-        };
-    };
-    return CoderNull;
-}(Coder));
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderNumber = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderNumber, _super);
-    function CoderNumber(coerceFunc, size, signed, localName) {
-        var _this = this;
-        var name = (signed ? 'int' : 'uint') + size * 8;
-        _this = _super.call(this, coerceFunc, name, name, localName, false) || this;
-        _this.size = size;
-        _this.signed = signed;
-        return _this;
-    }
-    CoderNumber.prototype.encode = function (value) {
-        var result;
-        try {
-            var v = new crypto_1.BN(value);
-            if (this.signed) {
-                var bounds = MaxUint256.maskn(this.size * 8 - 1);
-                if (v.gt(bounds)) {
-                    throw new Error('out-of-bounds');
-                }
-                bounds = bounds.add(One).mul(NegativeOne);
-                if (v.lt(bounds)) {
-                    throw new Error('out-of-bounds');
-                }
-            }
-            else if (v.lt(Zero) || v.gt(MaxUint256.maskn(this.size * 8))) {
-                throw new Error('out-of-bounds');
-            }
-            v = v.toTwos(this.size * 8).maskn(this.size * 8);
-            if (this.signed) {
-                v = v.fromTwos(this.size * 8).toTwos(256);
-            }
-            var vString = v.toString('hex');
-            result = crypto_1.padZeros(crypto_1.arrayify("0x" + vString) || new Uint8Array(), 32);
-        }
-        catch (error) {
-            crypto_1.throwError('invalid number value', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: this.name,
-                value: value,
-            });
-        }
-        return result || crypto_1.padZeros(new Uint8Array(), 32);
-    };
-    CoderNumber.prototype.decode = function (data, offset) {
-        if (data.length < offset + 32) {
-            crypto_1.throwError('insufficient data for ' + this.name + ' type', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: this.name,
-                value: crypto_1.hexlify(data.slice(offset, offset + 32)),
-            });
-        }
-        var junkLength = 32 - this.size;
-        var dataValue = crypto_1.hexlify(data.slice(offset + junkLength, offset + 32));
-        var value = utils_1.hexToBN(dataValue);
-        // tslint:disable-next-line: prefer-conditional-expression
-        if (this.signed) {
-            value = value.fromTwos(this.size * 8);
-        }
-        else {
-            value = value.maskn(this.size * 8);
-        }
-        return {
-            consumed: 32,
-            value: this.coerceFunc(this.name, value),
-        };
-    };
-    return CoderNumber;
-}(Coder));
-/** @hidden */
-var uint256Coder = new CoderNumber(function (type, value) {
-    return value;
-}, 32, false, 'none');
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderBoolean = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderBoolean, _super);
-    function CoderBoolean(coerceFunc, localName) {
-        return _super.call(this, coerceFunc, 'bool', 'bool', localName, false) || this;
-    }
-    CoderBoolean.prototype.encode = function (value) {
-        return uint256Coder.encode(!!value ? new crypto_1.BN(1) : new crypto_1.BN(0));
-    };
-    CoderBoolean.prototype.decode = function (data, offset) {
-        var result;
-        try {
-            result = uint256Coder.decode(data, offset);
-        }
-        catch (error) {
-            if (error.reason === 'insufficient data for uint256 type') {
-                crypto_1.throwError('insufficient data for boolean type', crypto_1.INVALID_ARGUMENT, {
-                    arg: this.localName,
-                    coderType: 'boolean',
-                    value: error.value,
-                });
-            }
-            throw error;
-        }
-        return {
-            consumed: result.consumed,
-            value: this.coerceFunc('bool', !result.value.isZero()),
-        };
-    };
-    return CoderBoolean;
-}(Coder));
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderFixedBytes = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderFixedBytes, _super);
-    function CoderFixedBytes(coerceFunc, length, localName) {
-        var _this = this;
-        var name = 'bytes' + length;
-        _this = _super.call(this, coerceFunc, name, name, localName, false) || this;
-        _this.length = length;
-        return _this;
-    }
-    CoderFixedBytes.prototype.encode = function (value) {
-        var result = new Uint8Array(this.length);
-        try {
-            var arrayied = crypto_1.arrayify(value);
-            var data = null;
-            if (arrayied !== null) {
-                var valueToByte = crypto_1.hexlify(arrayied);
-                data = crypto_1.arrayify(crypto_1.bytesPadRight(valueToByte, this.length));
-            }
-            else {
-                throw new Error('cannot arraify data');
-            }
-            if (data === null || data.length !== this.length) {
-                throw new Error('incorrect data length');
-            }
-            result.set(data);
-        }
-        catch (error) {
-            crypto_1.throwError('invalid ' + this.name + ' value', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: this.name,
-                value: error.value || value,
-            });
-        }
-        return result;
-    };
-    CoderFixedBytes.prototype.decode = function (data, offset) {
-        if (data.length < offset + 32) {
-            crypto_1.throwError('insufficient data for ' + name + ' type', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: this.name,
-                value: crypto_1.hexlify(data.slice(offset, offset + 32)),
-            });
-        }
-        return {
-            consumed: 32,
-            value: this.coerceFunc(this.name, crypto_1.hexlify(data.slice(offset, offset + this.length))),
-        };
-    };
-    return CoderFixedBytes;
-}(Coder));
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderAddress = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderAddress, _super);
-    function CoderAddress(coerceFunc, localName) {
-        return _super.call(this, coerceFunc, 'address', 'address', localName, false) || this;
-    }
-    CoderAddress.prototype.encode = function (value) {
-        var result = new Uint8Array(32);
-        try {
-            var addr = crypto_1.arrayify(crypto_1.toChecksumAddress(value)) || new Uint8Array();
-            result.set(addr, 12);
-        }
-        catch (error) {
-            crypto_1.throwError('invalid address', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: 'address',
-                value: value,
-            });
-        }
-        return result;
-    };
-    CoderAddress.prototype.decode = function (data, offset) {
-        if (data.length < offset + 32) {
-            crypto_1.throwError('insufficuent data for address type', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: 'address',
-                value: crypto_1.hexlify(data.slice(offset, offset + 32)),
-            });
-        }
-        return {
-            consumed: 32,
-            value: this.coerceFunc('address', crypto_1.toChecksumAddress(crypto_1.hexlify(data.slice(offset + 12, offset + 32)))),
-        };
-    };
-    return CoderAddress;
-}(Coder));
-/** @hidden */
-function _encodeDynamicBytes(value) {
-    var dataLength = 32 * Math.ceil(value.length / 32);
-    var padding = new Uint8Array(dataLength - value.length);
-    return crypto_1.concat([uint256Coder.encode(new crypto_1.BN(value.length)), value, padding]);
-}
-/** @hidden */
-function _decodeDynamicBytes(data, offset, localName) {
-    if (data.length < offset + 32) {
-        crypto_1.throwError('insufficient data for dynamicBytes length', crypto_1.INVALID_ARGUMENT, {
-            arg: localName,
-            coderType: 'dynamicBytes',
-            value: crypto_1.hexlify(data.slice(offset, offset + 32)),
-        });
-    }
-    var length = uint256Coder.decode(data, offset).value;
-    try {
-        length = length.toNumber();
-    }
-    catch (error) {
-        crypto_1.throwError('dynamic bytes count too large', crypto_1.INVALID_ARGUMENT, {
-            arg: localName,
-            coderType: 'dynamicBytes',
-            value: length.toString(),
-        });
-    }
-    if (data.length < offset + 32 + length) {
-        crypto_1.throwError('insufficient data for dynamicBytes type', crypto_1.INVALID_ARGUMENT, {
-            arg: localName,
-            coderType: 'dynamicBytes',
-            value: crypto_1.hexlify(data.slice(offset, offset + 32 + length)),
-        });
-    }
-    return {
-        consumed: 32 + 32 * Math.ceil(length / 32),
-        value: data.slice(offset + 32, offset + 32 + length),
-    };
-}
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderDynamicBytes = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderDynamicBytes, _super);
-    function CoderDynamicBytes(coerceFunc, localName) {
-        return _super.call(this, coerceFunc, 'bytes', 'bytes', localName, true) || this;
-    }
-    CoderDynamicBytes.prototype.encode = function (value) {
-        var result = new Uint8Array();
-        try {
-            result = _encodeDynamicBytes(crypto_1.arrayify(value) || new Uint8Array());
-        }
-        catch (error) {
-            crypto_1.throwError('invalid bytes value', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: 'bytes',
-                value: error.value,
-            });
-        }
-        return result;
-    };
-    CoderDynamicBytes.prototype.decode = function (data, offset) {
-        var result = _decodeDynamicBytes(data, offset, this.localName || '');
-        result.value = this.coerceFunc('bytes', crypto_1.hexlify(result.value));
-        return result;
-    };
-    return CoderDynamicBytes;
-}(Coder));
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderString = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderString, _super);
-    function CoderString(coerceFunc, localName) {
-        return _super.call(this, coerceFunc, 'string', 'string', localName, true) || this;
-    }
-    CoderString.prototype.encode = function (value) {
-        if (typeof value !== 'string') {
-            crypto_1.throwError('invalid string value', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: 'string',
-                value: value,
-            });
-        }
-        return _encodeDynamicBytes(toUtf8Bytes(value));
-    };
-    CoderString.prototype.decode = function (data, offset) {
-        var result = _decodeDynamicBytes(data, offset, this.localName || '');
-        result.value = this.coerceFunc('string', toUtf8String(result.value));
-        return result;
-    };
-    return CoderString;
-}(Coder));
-/** @hidden */
-function alignSize(size) {
-    return 32 * Math.ceil(size / 32);
-}
-/** @hidden */
-function pack(coders, values) {
-    if (Array.isArray(values)) {
-        // do nothing
-    }
-    else if (values && typeof values === 'object') {
-        var arrayValues_1 = [];
-        coders.forEach(function (coder) {
-            arrayValues_1.push(values[coder.localName || '']);
-        });
-        values = arrayValues_1;
-    }
-    else {
-        crypto_1.throwError('invalid tuple value', crypto_1.INVALID_ARGUMENT, {
-            coderType: 'tuple',
-            value: values,
-        });
-    }
-    if (coders.length !== values.length) {
-        crypto_1.throwError('types/value length mismatch', crypto_1.INVALID_ARGUMENT, {
-            coderType: 'tuple',
-            value: values,
-        });
-    }
-    var parts = [];
-    coders.forEach(function (coder, index) {
-        parts.push({ dynamic: coder.dynamic, value: coder.encode(values[index]) });
-    });
-    var staticSize = 0;
-    var dynamicSize = 0;
-    parts.forEach(function (part) {
-        if (part.dynamic) {
-            staticSize += 32;
-            dynamicSize += alignSize(part.value.length);
-        }
-        else {
-            staticSize += alignSize(part.value.length);
-            // todo : is it to be static size not alignSize?
-        }
-    });
-    var offset = 0;
-    var dynamicOffset = staticSize;
-    var data = new Uint8Array(staticSize + dynamicSize);
-    parts.forEach(function (part) {
-        if (part.dynamic) {
-            // uint256Coder.encode(dynamicOffset).copy(data, offset);
-            data.set(uint256Coder.encode(new crypto_1.BN(dynamicOffset)), offset);
-            offset += 32;
-            // part.value.copy(data, dynamicOffset);  @TODO
-            data.set(part.value, dynamicOffset);
-            dynamicOffset += alignSize(part.value.length);
-        }
-        else {
-            // part.value.copy(data, offset);  @TODO
-            data.set(part.value, offset);
-            offset += alignSize(part.value.length);
-        }
-    });
-    return data;
-}
-/** @hidden */
-function unpack(coders, data, offset) {
-    var baseOffset = offset;
-    var consumed = 0;
-    var value = [];
-    coders.forEach(function (coder) {
-        var result;
-        if (coder.dynamic) {
-            var dynamicOffset = uint256Coder.decode(data, offset);
-            result = coder.decode(data, baseOffset + dynamicOffset.value.toNumber());
-            // The dynamic part is leap-frogged somewhere else; doesn't count towards size
-            result.consumed = dynamicOffset.consumed;
-        }
-        else {
-            result = coder.decode(data, offset);
-        }
-        if (result.value !== undefined) {
-            value.push(result.value);
-        }
-        offset += result.consumed;
-        consumed += result.consumed;
-    });
-    coders.forEach(function (coder, index) {
-        var name = coder.localName;
-        if (!name) {
-            return;
-        }
-        if (name === 'length') {
-            name = '_length';
-        }
-        if (value[name] != null) {
-            return;
-        }
-        value[name] = value[index];
-    });
-    return {
-        value: value,
-        consumed: consumed,
-    };
-}
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderArray = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderArray, _super);
-    function CoderArray(coerceFunc, coder, length, localName) {
-        var _this = this;
-        var type = coder.type + '[' + (length >= 0 ? length : '') + ']';
-        var dynamic = length === -1 || coder.dynamic;
-        _this = _super.call(this, coerceFunc, 'array', type, localName, dynamic) || this;
-        _this.coder = coder;
-        _this.length = length;
-        return _this;
-    }
-    CoderArray.prototype.encode = function (value) {
-        if (!Array.isArray(value)) {
-            crypto_1.throwError('expected array value', crypto_1.INVALID_ARGUMENT, {
-                arg: this.localName,
-                coderType: 'array',
-                value: value,
-            });
-        }
-        var count = this.length;
-        var result = new Uint8Array(0);
-        if (count === -1) {
-            count = value.length;
-            result = uint256Coder.encode(new crypto_1.BN(count));
-        }
-        crypto_1.checkArgumentCount(count, value.length, ' in coder array' + (this.localName ? ' ' + this.localName : ''));
-        var coders = [];
-        // tslint:disable-next-line: prefer-for-of
-        for (var i = 0; i < value.length; i++) {
-            coders.push(this.coder);
-        }
-        return crypto_1.concat([result, pack(coders, value)]);
-    };
-    CoderArray.prototype.decode = function (data, offset) {
-        // @TODO:
-        // if (data.length < offset + length * 32) { throw new Error('invalid array'); }
-        var consumed = 0;
-        var count = this.length;
-        var decodedLength = { consumed: 0, value: undefined };
-        if (count === -1) {
-            try {
-                decodedLength = uint256Coder.decode(data, offset);
-            }
-            catch (error) {
-                crypto_1.throwError('insufficient data for dynamic array length', crypto_1.INVALID_ARGUMENT, {
-                    arg: this.localName,
-                    coderType: 'array',
-                    value: error.value,
-                });
-            }
-            try {
-                count = decodedLength.value.toNumber();
-            }
-            catch (error) {
-                crypto_1.throwError('array count too large', crypto_1.INVALID_ARGUMENT, {
-                    arg: this.localName,
-                    coderType: 'array',
-                    value: decodedLength.value.toString(),
-                });
-            }
-            consumed += decodedLength.consumed;
-            offset += decodedLength.consumed;
-        }
-        var coders = [];
-        for (var i = 0; i < count; i++) {
-            coders.push(new CoderAnonymous(this.coder));
-        }
-        var result = unpack(coders, data, offset);
-        result.consumed += consumed;
-        result.value = this.coerceFunc(this.type, result.value);
-        return result;
-    };
-    return CoderArray;
-}(Coder));
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var CoderTuple = /** @class */ (function (_super) {
-    tslib_1.__extends(CoderTuple, _super);
-    function CoderTuple(coerceFunc, coders, localName) {
-        var _this = this;
-        var dynamic = false;
-        var types = [];
-        coders.forEach(function (coder) {
-            if (coder.dynamic) {
-                dynamic = true;
-            }
-            types.push(coder.type);
-        });
-        var type = 'tuple(' + types.join(',') + ')';
-        _this = _super.call(this, coerceFunc, 'tuple', type, localName, dynamic) || this;
-        _this.coders = coders;
-        return _this;
-    }
-    CoderTuple.prototype.encode = function (value) {
-        return pack(this.coders, value);
-    };
-    CoderTuple.prototype.decode = function (data, offset) {
-        var result = unpack(this.coders, data, offset);
-        result.value = this.coerceFunc(this.type, result.value);
-        return result;
-    };
-    return CoderTuple;
-}(Coder));
-/** @hidden */
-function splitNesting(value) {
-    value = value.trim();
-    var result = [];
-    var accum = '';
-    var depth = 0;
-    // tslint:disable-next-line: prefer-for-of
-    for (var offset = 0; offset < value.length; offset++) {
-        var c = value[offset];
-        if (c === ',' && depth === 0) {
-            result.push(accum);
-            accum = '';
-        }
-        else {
-            accum += c;
-            if (c === '(') {
-                depth++;
-            }
-            else if (c === ')') {
-                depth--;
-                if (depth === -1) {
-                    throw new Error('unbalanced parenthsis');
-                }
-            }
-        }
-    }
-    if (accum) {
-        result.push(accum);
-    }
-    return result;
-}
-// @TODO: Is there a way to return "class"?
-/** @hidden */
-var paramTypeSimple = {
-    address: CoderAddress,
-    bool: CoderBoolean,
-    string: CoderString,
-    bytes: CoderDynamicBytes,
-};
-/** @hidden */
-function getTupleParamCoder(coerceFunc, components, localName) {
-    if (!components) {
-        components = [];
-    }
-    var coders = [];
-    components.forEach(function (component) {
-        coders.push(getParamCoder(coerceFunc, component));
-    });
-    return new CoderTuple(coerceFunc, coders, localName);
-}
-/** @hidden */
-function getParamCoder(coerceFunc, param) {
-    var coder = paramTypeSimple[param.type];
-    if (coder) {
-        return new coder(coerceFunc, param.name);
-    }
-    var matcher = param.type.match(paramTypeNumber);
-    if (matcher) {
-        var size = parseInt(matcher[2] || '256', 10);
-        if (size === 0 || size > 256 || size % 8 !== 0) {
-            crypto_1.throwError('invalid ' + matcher[1] + ' bit length', crypto_1.INVALID_ARGUMENT, {
-                arg: 'param',
-                value: param,
-            });
-        }
-        return new CoderNumber(coerceFunc, size / 8, matcher[1] === 'int', param.name || '');
-    }
-    var matcher2 = param.type.match(paramTypeBytes);
-    if (matcher2) {
-        var size = parseInt(matcher2[1], 10);
-        if (size === 0 || size > 32) {
-            crypto_1.throwError('invalid bytes length', crypto_1.INVALID_ARGUMENT, {
-                arg: 'param',
-                value: param,
-            });
-        }
-        return new CoderFixedBytes(coerceFunc, size, param.name || '');
-    }
-    var matcher3 = param.type.match(paramTypeArray);
-    if (matcher3) {
-        var size = parseInt(matcher3[2] || '-1', 10);
-        param = shallowCopy(param);
-        param.type = matcher3[1];
-        param = deepCopy(param);
-        return new CoderArray(coerceFunc, getParamCoder(coerceFunc, param), size, param.name || '');
-    }
-    if (param.type.substring(0, 5) === 'tuple') {
-        return getTupleParamCoder(coerceFunc, param.components || [], param.name || '');
-    }
-    if (param.type === '') {
-        return new CoderNull(coerceFunc, param.name || '');
-    }
-    crypto_1.throwError('invalid type', crypto_1.INVALID_ARGUMENT, {
-        arg: 'type',
-        value: param.type,
-    });
-}
-/** @hidden */
-var UnicodeNormalizationForm;
-(function (UnicodeNormalizationForm) {
-    UnicodeNormalizationForm["current"] = "";
-    UnicodeNormalizationForm["NFC"] = "NFC";
-    UnicodeNormalizationForm["NFD"] = "NFD";
-    UnicodeNormalizationForm["NFKC"] = "NFKC";
-    UnicodeNormalizationForm["NFKD"] = "NFKD";
-})(UnicodeNormalizationForm = exports.UnicodeNormalizationForm || (exports.UnicodeNormalizationForm = {}));
-/** @hidden */
-function toUtf8Bytes(str, form) {
-    if (form === void 0) { form = UnicodeNormalizationForm.current; }
-    if (form !== UnicodeNormalizationForm.current) {
-        crypto_1.checkNormalize();
-        str = str.normalize(form);
-    }
-    var result = [];
-    for (var i = 0; i < str.length; i++) {
-        var c = str.charCodeAt(i);
-        if (c < 0x80) {
-            result.push(c);
-        }
-        else if (c < 0x800) {
-            result.push((c >> 6) | 0xc0);
-            result.push((c & 0x3f) | 0x80);
-        }
-        else if ((c & 0xfc00) === 0xd800) {
-            i++;
-            var c2 = str.charCodeAt(i);
-            if (i >= str.length || (c2 & 0xfc00) !== 0xdc00) {
-                throw new Error('invalid utf-8 string');
-            }
-            // Surrogate Pair
-            c = 0x10000 + ((c & 0x03ff) << 10) + (c2 & 0x03ff);
-            result.push((c >> 18) | 0xf0);
-            result.push(((c >> 12) & 0x3f) | 0x80);
-            result.push(((c >> 6) & 0x3f) | 0x80);
-            result.push((c & 0x3f) | 0x80);
-        }
-        else {
-            result.push((c >> 12) | 0xe0);
-            result.push(((c >> 6) & 0x3f) | 0x80);
-            result.push((c & 0x3f) | 0x80);
-        }
-    }
-    return crypto_1.arrayify(result) || new Uint8Array();
-}
-exports.toUtf8Bytes = toUtf8Bytes;
-// http://stackoverflow.com/questions/13356493/decode-utf-8-with-javascript#13691499
-/** @hidden */
-function toUtf8String(bytes, ignoreErrors) {
-    bytes = crypto_1.arrayify(bytes) || new Uint8Array();
-    var result = '';
-    var i = 0;
-    // Invalid bytes are ignored
-    while (i < bytes.length) {
-        var c = bytes[i++];
-        // 0xxx xxxx
-        if (c >> 7 === 0) {
-            result += String.fromCharCode(c);
-            continue;
-        }
-        // Multibyte; how many bytes left for this character?
-        var extraLength = null;
-        var overlongMask = null;
-        // 110x xxxx 10xx xxxx
-        if ((c & 0xe0) === 0xc0) {
-            extraLength = 1;
-            overlongMask = 0x7f;
-            // 1110 xxxx 10xx xxxx 10xx xxxx
-        }
-        else if ((c & 0xf0) === 0xe0) {
-            extraLength = 2;
-            overlongMask = 0x7ff;
-            // 1111 0xxx 10xx xxxx 10xx xxxx 10xx xxxx
-        }
-        else if ((c & 0xf8) === 0xf0) {
-            extraLength = 3;
-            overlongMask = 0xffff;
-        }
-        else {
-            if (!ignoreErrors) {
-                if ((c & 0xc0) === 0x80) {
-                    throw new Error('invalid utf8 byte sequence; unexpected continuation byte');
-                }
-                throw new Error('invalid utf8 byte sequence; invalid prefix');
-            }
-            continue;
-        }
-        // Do we have enough bytes in our data?
-        if (i + extraLength > bytes.length) {
-            if (!ignoreErrors) {
-                throw new Error('invalid utf8 byte sequence; too short');
-            }
-            // If there is an invalid unprocessed byte, skip continuation bytes
-            for (; i < bytes.length; i++) {
-                if (bytes[i] >> 6 !== 0x02) {
-                    break;
-                }
-            }
-            continue;
-        }
-        // Remove the length prefix from the char
-        var res = c & ((1 << (8 - extraLength - 1)) - 1);
-        for (var j = 0; j < extraLength; j++) {
-            var nextChar = bytes[i];
-            // Invalid continuation byte
-            if ((nextChar & 0xc0) !== 0x80) {
-                res = null;
-                break;
-            }
-            res = (res << 6) | (nextChar & 0x3f);
-            i++;
-        }
-        if (res === null) {
-            if (!ignoreErrors) {
-                throw new Error('invalid utf8 byte sequence; invalid continuation byte');
-            }
-            continue;
-        }
-        // Check for overlong seuences (more bytes than needed)
-        if (res <= overlongMask) {
-            if (!ignoreErrors) {
-                throw new Error('invalid utf8 byte sequence; overlong');
-            }
-            continue;
-        }
-        // Maximum code point
-        if (res > 0x10ffff) {
-            if (!ignoreErrors) {
-                throw new Error('invalid utf8 byte sequence; out-of-range');
-            }
-            continue;
-        }
-        // Reserved for UTF-16 surrogate halves
-        if (res >= 0xd800 && res <= 0xdfff) {
-            if (!ignoreErrors) {
-                throw new Error('invalid utf8 byte sequence; utf-16 surrogate');
-            }
-            continue;
-        }
-        if (res <= 0xffff) {
-            result += String.fromCharCode(res);
-            continue;
-        }
-        res -= 0x10000;
-        result += String.fromCharCode(((res >> 10) & 0x3ff) + 0xd800, (res & 0x3ff) + 0xdc00);
-    }
-    return result;
-}
-exports.toUtf8String = toUtf8String;
-/** @hidden */
-function formatBytes32String(text) {
-    // Get the bytes
-    var bytes = toUtf8Bytes(text);
-    // Check we have room for null-termination
-    if (bytes.length > 31) {
-        throw new Error('bytes32 string must be less than 32 bytes');
-    }
-    // Zero-pad (implicitly null-terminates)
-    return crypto_1.hexlify(crypto_1.concat([bytes, HashZero]).slice(0, 32));
-}
-exports.formatBytes32String = formatBytes32String;
-/** @hidden */
-function parseBytes32String(bytes) {
-    var data = crypto_1.arrayify(bytes) || new Uint8Array();
-    // Must be 32 bytes with a null-termination
-    if (data.length !== 32) {
-        throw new Error('invalid bytes32 - not 32 bytes long');
-    }
-    if (data[31] !== 0) {
-        throw new Error('invalid bytes32 sdtring - no null terminator');
-    }
-    // Find the null termination
-    var length = 31;
-    while (data[length - 1] === 0) {
-        length--;
-    }
-    // Determine the string value
-    return toUtf8String(data.slice(0, length));
-}
-exports.parseBytes32String = parseBytes32String;
-/** @hidden */
-function isType(object, type) {
-    return object && object._ethersType === type;
-}
-exports.isType = isType;
-/** @hidden */
-function shallowCopy(object) {
-    var result = {};
-    // tslint:disable-next-line: forin
-    for (var key in object) {
-        result[key] = object[key];
-    }
-    return result;
-}
-exports.shallowCopy = shallowCopy;
-/** @hidden */
-var opaque = {
-    boolean: true,
-    number: true,
-    string: true,
-};
-/** @hidden */
-function deepCopy(object, frozen) {
-    // Opaque objects are not mutable, so safe to copy by assignment
-    if (object === undefined || object === null || opaque[typeof object]) {
-        return object;
-    }
-    // Arrays are mutable, so we need to create a copy
-    if (Array.isArray(object)) {
-        var result = object.map(function (item) { return deepCopy(item, frozen); });
-        if (frozen) {
-            Object.freeze(result);
-        }
-        return result;
-    }
-    if (typeof object === 'object') {
-        // Some internal objects, which are already immutable
-        if (isType(object, 'BigNumber')) {
-            return object;
-        }
-        if (isType(object, 'Description')) {
-            return object;
-        }
-        if (isType(object, 'Indexed')) {
-            return object;
-        }
-        var result = {};
-        // tslint:disable-next-line: forin
-        for (var key in object) {
-            var value = object[key];
-            if (value === undefined) {
-                continue;
-            }
-            utils_1.defineReadOnly(result, key, deepCopy(value, frozen));
-        }
-        if (frozen) {
-            Object.freeze(result);
-        }
-        return result;
-    }
-    // The function type is also immutable, so safe to copy by assignment
-    if (typeof object === 'function') {
-        return object;
-    }
-    throw new Error('Cannot deepCopy ' + typeof object);
-}
-exports.deepCopy = deepCopy;
-// tslint:disable-next-line: max-classes-per-file
-/** @hidden */
-var AbiCoder = /** @class */ (function () {
-    function AbiCoder(coerceFunc) {
-        crypto_1.checkNew(this, AbiCoder);
-        if (!coerceFunc) {
-            coerceFunc = exports.defaultCoerceFunc;
-        }
-        this.coerceFunc = coerceFunc;
-    }
-    AbiCoder.prototype.encode = function (types, values) {
-        var _this = this;
-        if (types.length !== values.length) {
-            crypto_1.throwError('types/values length mismatch', crypto_1.INVALID_ARGUMENT, {
-                count: { types: types.length, values: values.length },
-                value: { types: types, values: values },
-            });
-        }
-        var coders = [];
-        types.forEach(function (type) {
-            // Convert types to type objects
-            //   - "uint foo" => { type: "uint", name: "foo" }
-            //   - "tuple(uint, uint)" => { type: "tuple", components: [ { type: "uint" }, { type: "uint" }, ] }
-            var typeObject = null;
-            // tslint:disable-next-line: prefer-conditional-expression
-            if (typeof type === 'string') {
-                typeObject = parseParam(type);
-            }
-            else {
-                typeObject = type;
-            }
-            coders.push(getParamCoder(_this.coerceFunc, typeObject));
-        }, this);
-        var encodedArray = new CoderTuple(this.coerceFunc, coders, '_').encode(values);
-        return crypto_1.hexlify(encodedArray);
-    };
-    AbiCoder.prototype.decode = function (types, data) {
-        var _this = this;
-        var coders = [];
-        types.forEach(function (type) {
-            // See encode for details
-            var typeObject = null;
-            // tslint:disable-next-line: prefer-conditional-expression
-            if (typeof type === 'string') {
-                typeObject = parseParam(type);
-            }
-            else {
-                typeObject = deepCopy(type);
-            }
-            coders.push(getParamCoder(_this.coerceFunc, typeObject));
-        }, this);
-        var result = new CoderTuple(this.coerceFunc, coders, '_').decode(crypto_1.arrayify(data) || new Uint8Array(), 0).value;
-        return result;
-    };
-    return AbiCoder;
-}());
-exports.AbiCoder = AbiCoder;
-/** @hidden */
-exports.defaultAbiCoder = new AbiCoder();
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/abi/utils.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.bnToString = exports.flattenTypes = exports.jsonInterfaceMethodToString = void 0;
-var utils_1 = require("@harmony-js/utils");
-var crypto_1 = require("@harmony-js/crypto");
-exports.jsonInterfaceMethodToString = function (json) {
-    if (utils_1.isObject(json) && json.name && json.name.includes('(')) {
-        return json.name;
-    }
-    return json.name + "(" + exports.flattenTypes(false, json.inputs).join(',') + ")";
-};
-exports.flattenTypes = function (includeTuple, puts) {
-    // console.log("entered _flattenTypes. inputs/outputs: " + puts)
-    var types = [];
-    puts.forEach(function (param) {
-        if (typeof param.components === 'object') {
-            if (param.type.substring(0, 5) !== 'tuple') {
-                throw new Error('components found but type is not tuple; report on GitHub');
-            }
-            var suffix = '';
-            var arrayBracket = param.type.indexOf('[');
-            if (arrayBracket >= 0) {
-                suffix = param.type.substring(arrayBracket);
-            }
-            var result = exports.flattenTypes(includeTuple, param.components);
-            // console.log("result should have things: " + result)
-            if (utils_1.isArray(result) && includeTuple) {
-                // console.log("include tuple word, and its an array. joining...: " + result.types)
-                types.push("tuple(" + result.join(',') + ")" + suffix);
-            }
-            else if (!includeTuple) {
-                // console.log("don't include tuple, but its an array. joining...: " + result)
-                types.push("(" + result.join(',') + ")" + suffix);
-            }
-            else {
-                // console.log("its a single type within a tuple: " + result.types)
-                types.push("(" + result + ")");
-            }
-        }
-        else {
-            // console.log("its a type and not directly in a tuple: " + param.type)
-            types.push(param.type);
-        }
-    });
-    return types;
-};
-function bnToString(result) {
-    if (crypto_1.BN.isBN(result)) {
-        return result.toString();
-    }
-    else {
-        return result;
-    }
-}
-exports.bnToString = bnToString;
-
-},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/abi/api.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AbiCoderClass = void 0;
-var abiCoder_1 = require("./abiCoder");
-var utils_1 = require("@harmony-js/utils");
-var crypto_1 = require("@harmony-js/crypto");
-var utils_2 = require("./utils");
-var AbiCoderClass = /** @class */ (function () {
-    function AbiCoderClass(coder) {
-        this.coder = coder;
-    }
-    AbiCoderClass.prototype.encodeFunctionSignature = function (functionName) {
-        if (utils_1.isObject(functionName)) {
-            functionName = utils_2.jsonInterfaceMethodToString(functionName);
-        }
-        var result = crypto_1.keccak256(abiCoder_1.toUtf8Bytes(functionName));
-        return result.slice(0, 10);
-    };
-    AbiCoderClass.prototype.encodeEventSignature = function (functionName) {
-        if (utils_1.isObject(functionName)) {
-            functionName = utils_2.jsonInterfaceMethodToString(functionName);
-        }
-        var result = crypto_1.keccak256(abiCoder_1.toUtf8Bytes(functionName));
-        return result;
-    };
-    AbiCoderClass.prototype.encodeParameter = function (types, param) {
-        return this.encodeParameters([types], [param]);
-    };
-    AbiCoderClass.prototype.encodeParameters = function (types, params) {
-        return this.coder.encode(types, params);
-    };
-    AbiCoderClass.prototype.encodeFunctionCall = function (jsonInterface, params) {
-        return (this.encodeFunctionSignature(jsonInterface) +
-            this.encodeParameters(jsonInterface.inputs, params).replace('0x', ''));
-    };
-    AbiCoderClass.prototype.decodeParameter = function (type, bytes) {
-        return this.decodeParameters([type], bytes)[0];
-    };
-    AbiCoderClass.prototype.decodeParameters = function (outputs, bytes) {
-        if (utils_1.isArray(outputs) && outputs.length === 0) {
-            throw new Error('Empty outputs array given!');
-        }
-        if (!bytes || bytes === '0x' || bytes === '0X') {
-            throw new Error("Invalid bytes string given: " + bytes);
-        }
-        var result = this.coder.decode(outputs, bytes);
-        var returnValues = {};
-        var decodedValue;
-        if (utils_1.isArray(result)) {
-            if (outputs.length > 1) {
-                outputs.forEach(function (output, i) {
-                    decodedValue = result[i];
-                    if (decodedValue === '0x') {
-                        decodedValue = null;
-                    }
-                    returnValues[i] = utils_2.bnToString(decodedValue);
-                    if (utils_1.isObject(output) && output.name) {
-                        returnValues[output.name] = utils_2.bnToString(decodedValue);
-                    }
-                });
-                return returnValues;
-            }
-            return utils_2.bnToString(result);
-        }
-        if (utils_1.isObject(outputs[0]) && outputs[0].name) {
-            returnValues[outputs[0].name] = utils_2.bnToString(result);
-        }
-        returnValues[0] = utils_2.bnToString(result);
-        return returnValues;
-    };
-    AbiCoderClass.prototype.decodeLog = function (inputs, data, topics) {
-        var _this = this;
-        if (data === void 0) { data = ''; }
-        var returnValues = {};
-        var topicCount = 0;
-        var value;
-        var nonIndexedInputKeys = [];
-        var nonIndexedInputItems = [];
-        if (!utils_1.isArray(topics)) {
-            topics = [topics];
-        }
-        inputs.forEach(function (input, i) {
-            if (input.indexed) {
-                if (input.type === 'string') {
-                    return;
-                }
-                value = topics[topicCount];
-                if (_this.isStaticType(input.type)) {
-                    value = _this.decodeParameter(input.type, topics[topicCount]);
-                }
-                returnValues[i] = utils_2.bnToString(value);
-                returnValues[input.name] = utils_2.bnToString(value);
-                topicCount++;
-                return;
-            }
-            nonIndexedInputKeys.push(i);
-            nonIndexedInputItems.push(input);
-        });
-        if (data) {
-            var values_1 = this.decodeParameters(nonIndexedInputItems, data);
-            var decodedValue_1;
-            nonIndexedInputKeys.forEach(function (itemKey, index) {
-                decodedValue_1 = values_1[index];
-                returnValues[itemKey] = utils_2.bnToString(decodedValue_1);
-                returnValues[nonIndexedInputItems[index].name] = utils_2.bnToString(decodedValue_1);
-            });
-        }
-        return returnValues;
-    };
-    AbiCoderClass.prototype.isStaticType = function (type) {
-        if (type === 'bytes') {
-            return false;
-        }
-        if (type === 'string') {
-            return false;
-        }
-        if (type.indexOf('[') && type.slice(type.indexOf('[')).length === 2) {
-            return false;
-        }
-        return true;
-    };
-    return AbiCoderClass;
-}());
-exports.AbiCoderClass = AbiCoderClass;
-
-},{"./abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","./utils":"../node_modules/@harmony-js/contract/dist/abi/utils.js"}],"../node_modules/@harmony-js/contract/dist/abi/index.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AbiCoder = void 0;
-var api_1 = require("./api");
-var abiCoder_1 = require("./abiCoder");
-function AbiCoder() {
-    return new api_1.AbiCoderClass(new abiCoder_1.AbiCoder());
-}
-exports.AbiCoder = AbiCoder;
-
-},{"./api":"../node_modules/@harmony-js/contract/dist/abi/api.js","./abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js"}],"../node_modules/@harmony-js/account/dist/utils.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-account
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.defaultMessenger = void 0;
-var network_1 = require("@harmony-js/network");
-var utils_1 = require("@harmony-js/utils");
-exports.defaultMessenger = new network_1.Messenger(new network_1.HttpProvider('http://localhost:9500'), utils_1.ChainType.Harmony, utils_1.ChainID.HmyLocal);
-
-},{"@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/account/dist/account.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-account
- *
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Account = void 0;
-var tslib_1 = require("tslib");
-var crypto_1 = require("@harmony-js/crypto");
-var utils_1 = require("@harmony-js/utils");
-var transaction_1 = require("@harmony-js/transaction");
-var network_1 = require("@harmony-js/network");
-var utils_2 = require("./utils");
-var Account = /** @class */ (function () {
-    /**
-     * Generate an account object
-     *
-     * @param key import an existing privateKey, or create a random one
-     * @param messenger you can setMessage later, or set message on `new`
-     *
-     * @example
-     * ```javascript
-     * // import the Account class
-     * const { Account } = require('@harmony-js/account');
-     *
-     * // Messenger is optional, by default, we have a defaultMessenger
-     * // If you like to change, you will import related package here.
-     * const { HttpProvider, Messenger } = require('@harmony-js/network');
-     * const { ChainType, ChainID } = require('@harmony-js/utils');
-     *
-     * // create a custom messenger
-     * const customMessenger = new Messenger(
-     *   new HttpProvider('http://localhost:9500'),
-     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
-     *   ChainID.HmyLocal, // check if the chainId is correct
-     * )
-     *
-     * // setMessenger later
-     * const randomAccount = new Account()
-     * randomAccount.setMessenger(customMessenger)
-     *
-     * // or you can set messenger on `new`
-     * const randomAccountWithCustomMessenger = new Account(undefined, customMessenger)
-     *
-     * // NOTED: Key with or without `0x` are accepted, makes no different
-     * // NOTED: DO NOT import `mnemonic phrase` using `Account` class, use `Wallet` instead
-     * const myPrivateKey = '0xe19d05c5452598e24caad4a0d85a49146f7be089515c905ae6a19e8a578a6930'
-     * const myAccountWithMyPrivateKey = new Account(myPrivateKey)
-     * ```
-     */
-    function Account(key, messenger) {
-        if (messenger === void 0) { messenger = utils_2.defaultMessenger; }
-        /**@hidden */
-        this.balance = '0';
-        /**@hidden */
-        this.nonce = 0;
-        /**@hidden */
-        this.encrypted = false;
-        this.messenger = messenger;
-        if (!key) {
-            this._new();
-        }
-        else {
-            this._import(key);
-        }
-        this.shardID = this.messenger.currentShard || 0;
-        this.shards = new Map();
-        this.shards.set(this.shardID, {
-            address: "" + this.bech32Address + utils_1.AddressSuffix + "0",
-            balance: this.balance || '0',
-            nonce: this.nonce || 0,
-        });
-    }
-    /**
-     * static method create account
-     *
-     * @example
-     * ```javascript
-     * const account = new Account();
-     * console.log(account);
-     * ```
-     */
-    Account.new = function () {
-        var newAcc = new Account()._new();
-        return newAcc;
-    };
-    /**
-     * Static Method: add a private key to Account
-     * @param  {string} key - private Key
-     *
-     * @example
-     * ```javascript
-     * const account = new Account.add(key_1);
-     * console.log(account);
-     * ```
-     */
-    Account.add = function (key) {
-        var newAcc = new Account()._import(key);
-        return newAcc;
-    };
-    Object.defineProperty(Account.prototype, "checksumAddress", {
-        /**
-         * check sum address
-         *
-         * @example
-         * ```javascript
-         * console.log(account.checksumAddress);
-         * ```
-         */
-        get: function () {
-            return this.address ? crypto_1.getAddress(this.address).checksum : '';
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(Account.prototype, "bech32Address", {
-        /**
-         * Get bech32 Address
-         *
-         * @example
-         * ```javascript
-         * console.log(account.bech32Address);
-         * ```
-         */
-        get: function () {
-            return this.address ? crypto_1.getAddress(this.address).bech32 : '';
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(Account.prototype, "bech32TestNetAddress", {
-        /**
-         * get Bech32 TestNet Address
-         *
-         * @example
-         * ```javascript
-         * console.log(account.bech32TestNetAddress);
-         * ```
-         */
-        get: function () {
-            return this.address ? crypto_1.getAddress(this.address).bech32TestNet : '';
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(Account.prototype, "getShardsCount", {
-        /**
-         * get Shards number with this Account
-         *
-         * @example
-         * ```javascript
-         * console.log(account.getShardsCount);
-         * ```
-         */
-        get: function () {
-            return this.shards.size;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Account.prototype.toFile = function (password, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var file;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        if (!(this.privateKey && utils_1.isPrivateKey(this.privateKey))) return [3 /*break*/, 2];
-                        return [4 /*yield*/, crypto_1.encrypt(this.privateKey, password, options)];
-                    case 1:
-                        file = _a.sent();
-                        this.privateKey = file;
-                        this.encrypted = true;
-                        return [2 /*return*/, file];
-                    case 2: throw new Error('Encryption failed because PrivateKey is not correct');
-                }
-            });
-        });
-    };
-    Account.prototype.fromFile = function (keyStore, password) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var file, decyptedPrivateKey, error_1;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 2, , 3]);
-                        if (typeof password !== 'string') {
-                            throw new Error('you must provide password');
-                        }
-                        file = JSON.parse(keyStore.toLowerCase());
-                        return [4 /*yield*/, crypto_1.decrypt(file, password)];
-                    case 1:
-                        decyptedPrivateKey = _a.sent();
-                        if (utils_1.isPrivateKey(decyptedPrivateKey)) {
-                            return [2 /*return*/, this._import(decyptedPrivateKey)];
-                        }
-                        else {
-                            throw new Error('decrypted failed');
-                        }
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_1 = _a.sent();
-                        throw error_1;
-                    case 3: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Get the account balance
-     *
-     * @param blockNumber by default, it's `latest`
-     *
-     * @example
-     * ```javascript
-     * account.getBalance().then((value) => {
-     *   console.log(value);
-     * });
-     * ```
-     */
-    Account.prototype.getBalance = function (blockNumber) {
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var balance, nonce, error_2;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 5, , 6]);
-                        if (!this.messenger) return [3 /*break*/, 3];
-                        return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetBalance, [this.address, blockNumber], this.messenger.chainPrefix, this.messenger.currentShard || 0)];
-                    case 1:
-                        balance = _a.sent();
-                        return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetTransactionCount, [this.address, blockNumber], this.messenger.chainPrefix, this.messenger.currentShard || 0)];
-                    case 2:
-                        nonce = _a.sent();
-                        if (balance.isError()) {
-                            throw balance.error.message;
-                        }
-                        if (nonce.isError()) {
-                            throw nonce.error.message;
-                        }
-                        this.balance = utils_1.hexToNumber(balance.result);
-                        this.nonce = Number.parseInt(utils_1.hexToNumber(nonce.result), 10);
-                        this.shardID = this.messenger.currentShard || 0;
-                        return [3 /*break*/, 4];
-                    case 3: throw new Error('No Messenger found');
-                    case 4: return [2 /*return*/, {
-                            balance: this.balance,
-                            nonce: this.nonce,
-                            shardID: this.shardID,
-                        }];
-                    case 5:
-                        error_2 = _a.sent();
-                        throw error_2;
-                    case 6: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * @function updateShards
-     */
-    Account.prototype.updateBalances = function (blockNumber) {
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var shardProviders, shardProviders_1, shardProviders_1_1, _a, name_1, val, balanceObject, e_1_1, currentShard;
-            var e_1, _b;
-            return tslib_1.__generator(this, function (_c) {
-                switch (_c.label) {
-                    case 0:
-                        shardProviders = this.messenger.shardProviders;
-                        if (!(shardProviders.size > 1)) return [3 /*break*/, 10];
-                        _c.label = 1;
-                    case 1:
-                        _c.trys.push([1, 7, 8, 9]);
-                        shardProviders_1 = tslib_1.__values(shardProviders), shardProviders_1_1 = shardProviders_1.next();
-                        _c.label = 2;
-                    case 2:
-                        if (!!shardProviders_1_1.done) return [3 /*break*/, 6];
-                        _a = tslib_1.__read(shardProviders_1_1.value, 2), name_1 = _a[0], val = _a[1];
-                        return [4 /*yield*/, this.getShardBalance(val.shardID, blockNumber)];
-                    case 3:
-                        balanceObject = _c.sent();
-                        return [4 /*yield*/, this.shards.set(name_1 === val.shardID ? name_1 : val.shardID, balanceObject)];
-                    case 4:
-                        _c.sent();
-                        _c.label = 5;
-                    case 5:
-                        shardProviders_1_1 = shardProviders_1.next();
-                        return [3 /*break*/, 2];
-                    case 6: return [3 /*break*/, 9];
-                    case 7:
-                        e_1_1 = _c.sent();
-                        e_1 = { error: e_1_1 };
-                        return [3 /*break*/, 9];
-                    case 8:
-                        try {
-                            if (shardProviders_1_1 && !shardProviders_1_1.done && (_b = shardProviders_1.return)) _b.call(shardProviders_1);
-                        }
-                        finally { if (e_1) throw e_1.error; }
-                        return [7 /*endfinally*/];
-                    case 9: return [3 /*break*/, 12];
-                    case 10: return [4 /*yield*/, this.getShardBalance(this.messenger.currentShard || 0, blockNumber)];
-                    case 11:
-                        currentShard = _c.sent();
-                        this.shards.set(this.messenger.currentShard || 0, currentShard);
-                        _c.label = 12;
-                    case 12: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * @function signTransaction
-     */
-    Account.prototype.signTransaction = function (transaction, updateNonce, encodeMode, blockNumber) {
-        if (updateNonce === void 0) { updateNonce = true; }
-        if (encodeMode === void 0) { encodeMode = 'rlp'; }
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var txShardID, shardBalanceObject, shardNonce, _a, signature_1, rawTransaction_1;
-            var _this = this;
-            return tslib_1.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        if (!this.privateKey || !utils_1.isPrivateKey(this.privateKey)) {
-                            throw new Error(this.privateKey + " is not found or not correct");
-                        }
-                        if (!updateNonce) return [3 /*break*/, 2];
-                        txShardID = transaction.txParams.shardID;
-                        return [4 /*yield*/, this.getShardBalance(typeof txShardID === 'string' ? Number.parseInt(txShardID, 10) : txShardID, blockNumber)];
-                    case 1:
-                        shardBalanceObject = _b.sent();
-                        if (shardBalanceObject !== undefined) {
-                            shardNonce = shardBalanceObject.nonce;
-                            transaction.setParams(tslib_1.__assign(tslib_1.__assign({}, transaction.txParams), { from: this.messenger.chainPrefix === utils_1.ChainType.Harmony
-                                    ? this.bech32Address
-                                    : this.checksumAddress || '0x', nonce: shardNonce }));
-                        }
-                        else {
-                            transaction.setParams(tslib_1.__assign(tslib_1.__assign({}, transaction.txParams), { from: this.messenger.chainPrefix === utils_1.ChainType.Harmony
-                                    ? this.bech32Address
-                                    : this.checksumAddress || '0x', nonce: 0 }));
-                        }
-                        _b.label = 2;
-                    case 2:
-                        if (encodeMode === 'rlp') {
-                            _a = tslib_1.__read(transaction_1.RLPSign(transaction, this.privateKey), 2), signature_1 = _a[0], rawTransaction_1 = _a[1];
-                            return [2 /*return*/, transaction.map(function (obj) {
-                                    return tslib_1.__assign(tslib_1.__assign({}, obj), { signature: signature_1,
-                                        rawTransaction: rawTransaction_1, from: _this.messenger.chainPrefix === utils_1.ChainType.Harmony
-                                            ? _this.bech32Address
-                                            : _this.checksumAddress || '0x' });
-                                })];
-                        }
-                        else {
-                            // TODO: if we use other encode method, eg. protobuf, we should implement this
-                            return [2 /*return*/, transaction];
-                        }
-                        return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * This function is still in development, coming soon!
-     *
-     * @param staking
-     * @param updateNonce
-     * @param encodeMode
-     * @param blockNumber
-     * @param shardID
-     */
-    Account.prototype.signStaking = function (staking, updateNonce, encodeMode, blockNumber, shardID) {
-        if (updateNonce === void 0) { updateNonce = true; }
-        if (encodeMode === void 0) { encodeMode = 'rlp'; }
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        if (shardID === void 0) { shardID = this.messenger.currentShard; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var txShardID, shardBalanceObject, shardNonce, _a, signature, rawTransaction;
-            return tslib_1.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        if (!this.privateKey || !utils_1.isPrivateKey(this.privateKey)) {
-                            throw new Error(this.privateKey + " is not found or not correct");
-                        }
-                        if (!updateNonce) return [3 /*break*/, 2];
-                        txShardID = shardID;
-                        return [4 /*yield*/, this.getShardBalance(typeof txShardID === 'string' ? Number.parseInt(txShardID, 10) : txShardID, blockNumber)];
-                    case 1:
-                        shardBalanceObject = _b.sent();
-                        if (shardBalanceObject !== undefined) {
-                            shardNonce = shardBalanceObject.nonce;
-                            staking.setFromAddress(this.messenger.chainPrefix === utils_1.ChainType.Harmony
-                                ? this.bech32Address
-                                : this.checksumAddress || '0x');
-                            staking.setNonce(shardNonce);
-                        }
-                        else {
-                            staking.setFromAddress(this.messenger.chainPrefix === utils_1.ChainType.Harmony
-                                ? this.bech32Address
-                                : this.checksumAddress || '0x');
-                            staking.setNonce(0);
-                        }
-                        _b.label = 2;
-                    case 2:
-                        if (encodeMode === 'rlp') {
-                            _a = tslib_1.__read(staking.rlpSign(this.privateKey), 2), signature = _a[0], rawTransaction = _a[1];
-                            staking.setRawTransaction(rawTransaction);
-                            staking.setSignature(signature);
-                            staking.setFromAddress(this.messenger.chainPrefix === utils_1.ChainType.Harmony
-                                ? this.bech32Address
-                                : this.checksumAddress || '0x');
-                            return [2 /*return*/, staking];
-                        }
-                        else {
-                            // TODO: if we use other encode method, eg. protobuf, we should implement this
-                            return [2 /*return*/, staking];
-                        }
-                        return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * @param messenger
-     *
-     * @example
-     * ```javascript
-     * // create a custom messenger
-     * const customMessenger = new Messenger(
-     *   new HttpProvider('http://localhost:9500'),
-     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
-     *   ChainID.HmyLocal, // check if the chainId is correct
-     * )
-     *
-     * // to create an Account with random privateKey
-     * // and you can setMessenger later
-     * const randomAccount = new Account()
-     * randomAccount.setMessenger(customMessenger)
-     * ```
-     */
-    Account.prototype.setMessenger = function (messenger) {
-        this.messenger = messenger;
-    };
-    /**
-     * Get account address from shard ID
-     * @param shardID
-     *
-     * @example
-     * ```javascript
-     * console.log(account.getAddressFromShardID(0));
-     *
-     * > one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7-0
-     * ```
-     */
-    Account.prototype.getAddressFromShardID = function (shardID) {
-        var shardObject = this.shards.get(shardID);
-        if (shardObject) {
-            return shardObject.address;
-        }
-        else {
-            return undefined;
-        }
-    };
-    /**
-     * Get all shards' addresses from the account
-     *
-     * @example
-     * ```javascript
-     * console.log(account.getAddresses());
-     * ```
-     */
-    Account.prototype.getAddresses = function () {
-        var e_2, _a;
-        var addressArray = [];
-        try {
-            for (var _b = tslib_1.__values(this.shards), _c = _b.next(); !_c.done; _c = _b.next()) {
-                var _d = tslib_1.__read(_c.value, 2), name_2 = _d[0], val = _d[1];
-                var index = typeof name_2 === 'string' ? Number.parseInt(name_2, 10) : name_2;
-                addressArray[index] = val.address;
-            }
-        }
-        catch (e_2_1) { e_2 = { error: e_2_1 }; }
-        finally {
-            try {
-                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
-            }
-            finally { if (e_2) throw e_2.error; }
-        }
-        return addressArray;
-    };
-    /**
-     * Get the specific shard's balance
-     *
-     * @param shardID `shardID` is binding with the endpoint, IGNORE it!
-     * @param blockNumber by default, it's `latest`
-     *
-     * @example
-     * ```
-     * account.getShardBalance().then((value) => {
-     *   console.log(value);
-     * });
-     * ```
-     */
-    Account.prototype.getShardBalance = function (shardID, blockNumber) {
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var balance, nonce;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetBalance, [this.address, blockNumber], this.messenger.chainPrefix, shardID)];
-                    case 1:
-                        balance = _a.sent();
-                        return [4 /*yield*/, this.messenger.send(network_1.RPCMethod.GetTransactionCount, [this.address, blockNumber], this.messenger.chainPrefix, shardID)];
-                    case 2:
-                        nonce = _a.sent();
-                        if (balance.isError()) {
-                            throw balance.error.message;
-                        }
-                        if (nonce.isError()) {
-                            throw nonce.error.message;
-                        }
-                        return [2 /*return*/, {
-                                address: "" + this.bech32Address + utils_1.AddressSuffix + shardID,
-                                balance: utils_1.hexToNumber(balance.result),
-                                nonce: Number.parseInt(utils_1.hexToNumber(nonce.result), 10),
-                            }];
-                }
-            });
-        });
-    };
-    /**
-     * @function _new private method create Account
-     * @return {Account} Account instance
-     * @ignore
-     */
-    Account.prototype._new = function () {
-        var prv = crypto_1.generatePrivateKey();
-        if (!utils_1.isPrivateKey(prv)) {
-            throw new Error('key gen failed');
-        }
-        return this._import(prv);
-    };
-    /**
-     * @function _import private method import a private Key
-     * @param  {string} key - private key
-     * @return {Account} Account instance
-     * @ignore
-     */
-    Account.prototype._import = function (key) {
-        if (!utils_1.isPrivateKey(key)) {
-            throw new Error(key + " is not PrivateKey");
-        }
-        this.privateKey = utils_1.add0xToString(key);
-        this.publicKey = crypto_1.getPubkeyFromPrivateKey(this.privateKey);
-        this.address = crypto_1.getAddressFromPrivateKey(this.privateKey);
-        this.shardID = this.messenger.currentShard || 0;
-        this.shards = new Map();
-        this.shards.set(this.shardID, {
-            address: "" + this.bech32Address + utils_1.AddressSuffix + "0",
-            balance: this.balance || '0',
-            nonce: this.nonce || 0,
-        });
-        this.encrypted = false;
-        return this;
-    };
-    return Account;
-}());
-exports.Account = Account;
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/transaction":"../node_modules/@harmony-js/transaction/dist/index.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","./utils":"../node_modules/@harmony-js/account/dist/utils.js"}],"../node_modules/@harmony-js/account/dist/wallet.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-account
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Wallet = void 0;
-var tslib_1 = require("tslib");
-var crypto_1 = require("@harmony-js/crypto");
-var utils_1 = require("@harmony-js/utils");
-var account_1 = require("./account");
-var utils_2 = require("./utils");
-var Wallet = /** @class */ (function () {
-    /**
-     * @example
-     * ```
-     * const { Wallet } = require('@harmony-js/account');
-     * const { HttpProvider, Messenger } = require('@harmony-js/network');
-     * const { ChainType, ChainID } = require('@harmony-js/utils');
-     *
-     * // create a custom messenger
-     * const customMessenger = new Messenger(
-     *   new HttpProvider('http://localhost:9500'),
-     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
-     *   ChainID.HmyLocal, // check if the chainId is correct
-     * )
-     *
-     * const wallet = new Wallet(customMessenger);
-     * ```
-     */
-    function Wallet(messenger) {
-        if (messenger === void 0) { messenger = utils_2.defaultMessenger; }
-        /**
-         * @hidden
-         */
-        this.accountMap = new Map();
-        this.messenger = messenger;
-    }
-    // static method generate Mnemonic
-    Wallet.generateMnemonic = function () {
-        return crypto_1.bip39.generateMnemonic();
-    };
-    Object.defineProperty(Wallet.prototype, "accounts", {
-        /**
-         * get acounts addresses
-         *
-         * @return {string[]} accounts addresses
-         *
-         * @example
-         * ```javascript
-         * const wallet = new Wallet(customMessenger);
-         * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
-         * wallet.addByPrivateKey(key_1);
-         *
-         * console.log(wallet.accounts);
-         * ```
-         */
-        get: function () {
-            return tslib_1.__spread(this.accountMap.keys());
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(Wallet.prototype, "signer", {
-        /**
-         * get the signer of the account, by default, using the first account
-         *
-         * @example
-         * ```javascript
-         * const wallet = new Wallet(customMessenger);
-         * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
-         * wallet.addByPrivateKey(key_1);
-         *
-         * console.log(wallet.signer)
-         * ```
-         */
-        get: function () {
-            if (this.defaultSigner) {
-                return this.getAccount(this.defaultSigner);
-            }
-            else if (!this.defaultSigner && this.accounts.length > 0) {
-                this.setSigner(this.accounts[0]);
-                return this.getAccount(this.accounts[0]);
-            }
-            else {
-                return undefined;
-            }
-        },
-        enumerable: false,
-        configurable: true
-    });
-    /**
-     * @function newMnemonic
-     * @memberof Wallet
-     * @return {string} Mnemonics
-     */
-    Wallet.prototype.newMnemonic = function () {
-        return Wallet.generateMnemonic();
-    };
-    /**
-     * Add account using Mnemonic phrases
-     * @param  {string} phrase - Mnemonic phrase
-     * @param  {index} index - index to hdKey root
-     *
-     * @example
-     * ```javascript
-     * const mnemonic_1 = 'urge clog right example dish drill card maximum mix bachelor section select';
-     * const wallet = new Wallet(customMessenger);
-     * wallet.addByMnemonic(mnemonic_1);
-     *
-     * console.log(wallet.accounts);
-     * ```
-     */
-    Wallet.prototype.addByMnemonic = function (phrase, index) {
-        if (index === void 0) { index = 0; }
-        if (!this.isValidMnemonic(phrase)) {
-            throw new Error("Invalid mnemonic phrase: " + phrase);
-        }
-        var seed = crypto_1.bip39.mnemonicToSeed(phrase);
-        var hdKey = crypto_1.hdkey.fromMasterSeed(seed);
-        // TODO:hdkey should apply to Harmony's settings
-        var path = this.messenger.chainType === utils_1.ChainType.Harmony ? '1023' : '60';
-        var childKey = hdKey.derive("m/44'/" + path + "'/0'/0/" + index);
-        var privateKey = childKey.privateKey.toString('hex');
-        return this.addByPrivateKey(privateKey);
-    };
-    /**
-     * Add an account using privateKey
-     *
-     * @param  {string} privateKey - privateKey to add
-     * @return {Account} return added Account
-     *
-     * @example
-     * ```javascript
-     * const wallet = new Wallet(customMessenger);
-     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
-     * console.log(wallet.addByPrivateKey(key_1));
-     * ```
-     */
-    Wallet.prototype.addByPrivateKey = function (privateKey) {
-        try {
-            var newAcc = account_1.Account.add(privateKey);
-            newAcc.setMessenger(this.messenger);
-            if (newAcc.address) {
-                this.accountMap.set(newAcc.address, newAcc);
-                if (!this.defaultSigner) {
-                    this.setSigner(newAcc.address);
-                }
-                return newAcc;
-            }
-            else {
-                throw new Error('add account failed');
-            }
-        }
-        catch (error) {
-            throw error;
-        }
-    };
-    /**
-     * Add an account using privateKey
-     * @param  {string} keyStore - keystore jsonString to add
-     * @param  {string} password - password to decrypt the file
-     * @return {Account} return added Account
-     */
-    Wallet.prototype.addByKeyStore = function (keyStore, password) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var newAcc, result, error_1;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 2, , 3]);
-                        newAcc = new account_1.Account(undefined);
-                        return [4 /*yield*/, newAcc.fromFile(keyStore, password)];
-                    case 1:
-                        result = _a.sent();
-                        result.setMessenger(this.messenger);
-                        if (result.address) {
-                            this.accountMap.set(result.address, result);
-                            if (!this.defaultSigner) {
-                                this.setSigner(result.address);
-                            }
-                            return [2 /*return*/, result];
-                        }
-                        else {
-                            throw new Error('add account failed');
-                        }
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_1 = _a.sent();
-                        throw error_1;
-                    case 3: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * create a new account using Mnemonic
-     * @return {Account} {description}
-     *
-     * @example
-     * ```javascript
-     * console.log(wallet.accounts);
-     * wallet.createAccount();
-     * wallet.createAccount();
-     *
-     * console.log(wallet.accounts);
-     * ````
-     */
-    Wallet.prototype.createAccount = function (password, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var prv, acc, encrypted;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        prv = crypto_1.generatePrivateKey();
-                        acc = this.addByPrivateKey(prv);
-                        if (!(acc.address && password)) return [3 /*break*/, 2];
-                        return [4 /*yield*/, this.encryptAccount(acc.address, password, options)];
-                    case 1:
-                        encrypted = _a.sent();
-                        return [2 /*return*/, encrypted];
-                    case 2:
-                        if (acc.address && !password) {
-                            return [2 /*return*/, acc];
-                        }
-                        else {
-                            throw new Error('create acount failed');
-                        }
-                        _a.label = 3;
-                    case 3: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * To encrypt an account that lives in the wallet.
-     * if encrypted, returns original one, if not found, throw error
-     * @param {string} address - address in accounts
-     * @param {string} password - string that used to encrypt
-     * @param {EncryptOptions} options - encryption options
-     * @return {Promise<Account>}
-     *
-     * @example
-     * ```javascript
-     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
-     * wallet.addByPrivateKey(key_1);
-     * wallet.encryptAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7', '12345').then((value) => {
-     *   console.log(value);
-     * })
-     * ```
-     */
-    Wallet.prototype.encryptAccount = function (address, password, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var foundAcc, error_2;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 4, , 5]);
-                        foundAcc = this.getAccount(address);
-                        if (!(foundAcc && foundAcc.privateKey && utils_1.isPrivateKey(foundAcc.privateKey))) return [3 /*break*/, 2];
-                        return [4 /*yield*/, foundAcc.toFile(password, options)];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/, foundAcc];
-                    case 2:
-                        if (foundAcc && foundAcc.privateKey && !utils_1.isPrivateKey(foundAcc.privateKey)) {
-                            return [2 /*return*/, foundAcc];
-                        }
-                        else {
-                            throw new Error('encrypt account failed');
-                        }
-                        _a.label = 3;
-                    case 3: return [3 /*break*/, 5];
-                    case 4:
-                        error_2 = _a.sent();
-                        throw error_2;
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * To decrypt an account that lives in the wallet,if not encrypted, return original,
-     * if not found, throw error
-     * @param {string} address - address in accounts
-     * @param {string} password - string that used to encrypt
-     * @return {Promise<Account>}
-     *
-     * @example
-     * ```javascript
-     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
-     * wallet.addByPrivateKey(key_1);
-     * wallet.encryptAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7', '12345')
-     * .then(() => {
-     *   wallet.decryptAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7', '12345')
-     *   .then((value) =>{
-     *      console.log(value);
-     *   });
-     * });
-     * ```
-     */
-    Wallet.prototype.decryptAccount = function (address, password) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var foundAcc, error_3;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 4, , 5]);
-                        foundAcc = this.getAccount(address);
-                        if (!(foundAcc && foundAcc.privateKey && !utils_1.isPrivateKey(foundAcc.privateKey))) return [3 /*break*/, 2];
-                        return [4 /*yield*/, foundAcc.fromFile(foundAcc.privateKey, password)];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/, foundAcc];
-                    case 2:
-                        if (foundAcc && foundAcc.privateKey && utils_1.isPrivateKey(foundAcc.privateKey)) {
-                            foundAcc.encrypted = false;
-                            return [2 /*return*/, foundAcc];
-                        }
-                        else {
-                            throw new Error('decrypt account failed');
-                        }
-                        _a.label = 3;
-                    case 3: return [3 /*break*/, 5];
-                    case 4:
-                        error_3 = _a.sent();
-                        throw error_3;
-                    case 5: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Get Account instance using address as param
-     * @param  {string} address - address hex
-     * @return {Account} Account instance which lives in Wallet
-     *
-     * @example
-     * ```
-     * const key_1 = '45e497bd45a9049bcb649016594489ac67b9f052a6cdf5cb74ee2427a60bf25e';
-     * wallet.addByPrivateKey(key_1);
-     * console.log(wallet.getAccount('one103q7qe5t2505lypvltkqtddaef5tzfxwsse4z7'));
-     * ```
-     */
-    Wallet.prototype.getAccount = function (address) {
-        return this.accountMap.get(crypto_1.getAddress(address).basicHex);
-    };
-    /**
-     * @function removeAccount
-     * @memberof Wallet
-     * @description remove Account using address as param
-     * @param  {string} address: - address hex
-     */
-    Wallet.prototype.removeAccount = function (address) {
-        this.accountMap.delete(crypto_1.getAddress(address).basicHex);
-        if (this.defaultSigner === address) {
-            this.defaultSigner = undefined;
-        }
-    };
-    /**
-     * Set Customer Messenage
-     * @param messenger
-     *
-     * @example
-     * ```javascript
-     * const customMessenger = new Messenger(
-     *   new HttpProvider('https://api.s0.b.hmny.io'),
-     *   ChainType.Harmony, // if you are connected to Harmony's blockchain
-     *   ChainID.HmyLocal, // check if the chainId is correct
-     * )
-     * const wallet = new Wallet();
-     * wallet.setMessenger(customMessenger);
-     * console.log(wallet.messenger);
-     * ```
-     */
-    Wallet.prototype.setMessenger = function (messenger) {
-        this.messenger = messenger;
-    };
-    /**
-     * Set signer
-     *
-     * @param address one of the address in the accounts
-     */
-    Wallet.prototype.setSigner = function (address) {
-        if (!utils_1.isAddress(address) && !this.getAccount(address)) {
-            throw new Error('could not set signer');
-        }
-        this.defaultSigner = address;
-    };
-    Wallet.prototype.signTransaction = function (transaction, account, 
-    // tslint:disable-next-line: no-unnecessary-initializer
-    password, updateNonce, encodeMode, blockNumber) {
-        if (account === void 0) { account = this.signer; }
-        if (password === void 0) { password = undefined; }
-        if (updateNonce === void 0) { updateNonce = true; }
-        if (encodeMode === void 0) { encodeMode = 'rlp'; }
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var toSignWith, decrypted, signed, error_4, signed, error_5;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        toSignWith = account || this.signer;
-                        if (!toSignWith) {
-                            throw new Error('no signer found or did not provide correct account');
-                        }
-                        if (!(toSignWith instanceof account_1.Account && toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 7];
-                        if (!password) {
-                            throw new Error('must provide password to further execution');
-                        }
-                        _a.label = 1;
-                    case 1:
-                        _a.trys.push([1, 5, , 6]);
-                        return [4 /*yield*/, this.decryptAccount(toSignWith.address, password)];
-                    case 2:
-                        decrypted = _a.sent();
-                        return [4 /*yield*/, decrypted.signTransaction(transaction, updateNonce, encodeMode, blockNumber)];
-                    case 3:
-                        signed = _a.sent();
-                        return [4 /*yield*/, this.encryptAccount(toSignWith.address, password)];
-                    case 4:
-                        _a.sent();
-                        return [2 /*return*/, signed];
-                    case 5:
-                        error_4 = _a.sent();
-                        throw error_4;
-                    case 6: return [3 /*break*/, 13];
-                    case 7:
-                        if (!(toSignWith instanceof account_1.Account && !toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 12];
-                        _a.label = 8;
-                    case 8:
-                        _a.trys.push([8, 10, , 11]);
-                        return [4 /*yield*/, toSignWith.signTransaction(transaction, updateNonce, encodeMode, blockNumber)];
-                    case 9:
-                        signed = _a.sent();
-                        return [2 /*return*/, signed];
-                    case 10:
-                        error_5 = _a.sent();
-                        throw error_5;
-                    case 11: return [3 /*break*/, 13];
-                    case 12: throw new Error('sign transaction failed');
-                    case 13: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    Wallet.prototype.signStaking = function (staking, account, 
-    // tslint:disable-next-line: no-unnecessary-initializer
-    password, updateNonce, encodeMode, blockNumber, shardID) {
-        if (account === void 0) { account = this.signer; }
-        if (password === void 0) { password = undefined; }
-        if (updateNonce === void 0) { updateNonce = true; }
-        if (encodeMode === void 0) { encodeMode = 'rlp'; }
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        if (shardID === void 0) { shardID = this.messenger.currentShard; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var toSignWith, decrypted, signed, error_6, signed, error_7;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        toSignWith = account || this.signer;
-                        if (!toSignWith) {
-                            throw new Error('no signer found or did not provide correct account');
-                        }
-                        if (!(toSignWith instanceof account_1.Account && toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 7];
-                        if (!password) {
-                            throw new Error('must provide password to further execution');
-                        }
-                        _a.label = 1;
-                    case 1:
-                        _a.trys.push([1, 5, , 6]);
-                        return [4 /*yield*/, this.decryptAccount(toSignWith.address, password)];
-                    case 2:
-                        decrypted = _a.sent();
-                        return [4 /*yield*/, decrypted.signStaking(staking, updateNonce, encodeMode, blockNumber, shardID)];
-                    case 3:
-                        signed = _a.sent();
-                        return [4 /*yield*/, this.encryptAccount(toSignWith.address, password)];
-                    case 4:
-                        _a.sent();
-                        return [2 /*return*/, signed];
-                    case 5:
-                        error_6 = _a.sent();
-                        throw error_6;
-                    case 6: return [3 /*break*/, 13];
-                    case 7:
-                        if (!(toSignWith instanceof account_1.Account && !toSignWith.encrypted && toSignWith.address)) return [3 /*break*/, 12];
-                        _a.label = 8;
-                    case 8:
-                        _a.trys.push([8, 10, , 11]);
-                        return [4 /*yield*/, toSignWith.signStaking(staking, updateNonce, encodeMode, blockNumber, shardID)];
-                    case 9:
-                        signed = _a.sent();
-                        return [2 /*return*/, signed];
-                    case 10:
-                        error_7 = _a.sent();
-                        throw error_7;
-                    case 11: return [3 /*break*/, 13];
-                    case 12: throw new Error('sign transaction failed');
-                    case 13: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * @function isValidMnemonic
-     * @memberof Wallet
-     * @description check if Mnemonic is valid
-     * @param  {string} phrase - Mnemonic phrase
-     * @return {boolean}
-     * @ignore
-     */
-    Wallet.prototype.isValidMnemonic = function (phrase) {
-        if (phrase.trim().split(/\s+/g).length < 12) {
-            return false;
-        }
-        return crypto_1.bip39.validateMnemonic(phrase);
-    };
-    return Wallet;
-}());
-exports.Wallet = Wallet;
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","./account":"../node_modules/@harmony-js/account/dist/account.js","./utils":"../node_modules/@harmony-js/account/dist/utils.js"}],"../node_modules/@harmony-js/account/dist/types.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-account
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-
-},{}],"../node_modules/@harmony-js/account/dist/hdnode.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-account
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.HDNode = void 0;
-var tslib_1 = require("tslib");
-var crypto_1 = require("@harmony-js/crypto");
-var utils_1 = require("@harmony-js/utils");
-var network_1 = require("@harmony-js/network");
-var transaction_1 = require("@harmony-js/transaction");
-var account_1 = require("./account");
-var HDNode = /** @class */ (function () {
-    function HDNode(provider, menmonic, index, addressCount, shardID, chainType, chainId, gasLimit, gasPrice) {
-        if (provider === void 0) { provider = 'http://localhost:9500'; }
-        if (index === void 0) { index = 0; }
-        if (addressCount === void 0) { addressCount = 1; }
-        if (shardID === void 0) { shardID = 0; }
-        if (chainType === void 0) { chainType = utils_1.ChainType.Harmony; }
-        if (chainId === void 0) { chainId = utils_1.ChainID.Default; }
-        if (gasLimit === void 0) { gasLimit = '1000000'; }
-        if (gasPrice === void 0) { gasPrice = '2000000000'; }
-        this.provider = this.setProvider(provider);
-        this.shardID = shardID;
-        this.messenger = new network_1.Messenger(this.provider, chainType, chainId);
-        this.messenger.setDefaultShardID(this.shardID);
-        this.hdwallet = undefined;
-        this.addresses = [];
-        this.wallets = {};
-        this.path = chainType === utils_1.ChainType.Harmony ? utils_1.HDPath : "m/44'/60'/0'/0/";
-        this.index = index;
-        this.addressCount = addressCount;
-        this.getHdWallet(menmonic || HDNode.generateMnemonic());
-        this.gasLimit = gasLimit;
-        this.gasPrice = gasPrice;
-    }
-    HDNode.isValidMnemonic = function (phrase) {
-        if (phrase.trim().split(/\s+/g).length < 12) {
-            return false;
-        }
-        return crypto_1.bip39.validateMnemonic(phrase);
-    };
-    HDNode.generateMnemonic = function () {
-        return crypto_1.bip39.generateMnemonic();
-    };
-    HDNode.prototype.normalizePrivateKeys = function (mnemonic) {
-        if (Array.isArray(mnemonic)) {
-            return mnemonic;
-        }
-        else if (mnemonic && !mnemonic.includes(' ')) {
-            return [mnemonic];
-        }
-        else {
-            return false;
-        }
-    };
-    HDNode.prototype.setProvider = function (provider) {
-        if (utils_1.isHttp(provider) && typeof provider === 'string') {
-            return new network_1.HttpProvider(provider);
-        }
-        else if (provider instanceof network_1.HttpProvider) {
-            return provider;
-        }
-        else if (utils_1.isWs(provider) && typeof provider === 'string') {
-            return new network_1.WSProvider(provider);
-        }
-        else if (provider instanceof network_1.WSProvider) {
-            return provider;
-        }
-        else {
-            throw new Error('provider is not recognized');
-        }
-    };
-    HDNode.prototype.getHdWallet = function (mnemonic) {
-        if (!HDNode.isValidMnemonic(mnemonic)) {
-            throw new Error('Mnemonic invalid or undefined');
-        }
-        this.hdwallet = crypto_1.hdkey.fromMasterSeed(crypto_1.bip39.mnemonicToSeed(mnemonic));
-        for (var i = this.index; i < this.index + this.addressCount; i++) {
-            if (!this.hdwallet) {
-                throw new Error('hdwallet is not found');
-            }
-            var childKey = this.hdwallet.derive("" + this.path + i);
-            var prv = childKey.privateKey.toString('hex');
-            var account = new account_1.Account(prv);
-            var addr = account.checksumAddress;
-            this.addresses.push(addr);
-            this.wallets[addr] = account;
-        }
-    };
-    // tslint:disable-next-line: ban-types
-    HDNode.prototype.getAccounts = function (cb) {
-        if (cb) {
-            cb(null, this.addresses);
-        }
-        return this.addresses;
-    };
-    // tslint:disable-next-line: ban-types
-    HDNode.prototype.getPrivateKey = function (address, cb) {
-        if (!cb) {
-            if (!this.wallets[address]) {
-                throw new Error('Account not found');
-            }
-            else {
-                return this.wallets[address].privateKey;
-            }
-        }
-        if (!this.wallets[address]) {
-            return cb('Account not found');
-        }
-        else {
-            cb(null, this.wallets[address].privateKey);
-        }
-    };
-    // tslint:disable-next-line: ban-types
-    HDNode.prototype.signTransaction = function (txParams) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var from, accountNonce, to, gasLimit, gasPrice, value, nonce, data, prv, signerAccount, tx, signed;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        from = txParams.from ? crypto_1.getAddress(txParams.from).checksum : '0x';
-                        return [4 /*yield*/, this.messenger.send('hmy_getTransactionCount', [from, 'latest'], 'hmy', this.shardID)];
-                    case 1:
-                        accountNonce = _a.sent();
-                        to = txParams.to ? crypto_1.getAddress(txParams.to).checksum : '0x';
-                        gasLimit = new utils_1.Unit('0').asWei().toWei();
-                        if (txParams.gas !== undefined && utils_1.isHex(txParams.gas)) {
-                            gasLimit = new utils_1.Unit(txParams.gas)
-                                .asWei()
-                                .toWei()
-                                .lt(new utils_1.Unit(this.gasLimit).asWei().toWei())
-                                ? new utils_1.Unit(txParams.gas).asWei().toWei()
-                                : new utils_1.Unit(this.gasLimit).asWei().toWei();
-                        }
-                        if (txParams.gasLimit !== undefined && utils_1.isHex(txParams.gasLimit)) {
-                            gasLimit = new utils_1.Unit(txParams.gasLimit)
-                                .asWei()
-                                .toWei()
-                                .lt(new utils_1.Unit(this.gasLimit).asWei().toWei())
-                                ? new utils_1.Unit(txParams.gasLimit).asWei().toWei()
-                                : new utils_1.Unit(this.gasLimit).asWei().toWei();
-                        }
-                        gasPrice = new utils_1.Unit('0').asWei().toWei();
-                        if (txParams.gasPrice !== undefined && utils_1.isHex(txParams.gasPrice)) {
-                            gasPrice = new utils_1.Unit(txParams.gasPrice)
-                                .asWei()
-                                .toWei()
-                                .lt(new utils_1.Unit(this.gasPrice).asWei().toWei())
-                                ? new utils_1.Unit(txParams.gasPrice).asWei().toWei()
-                                : new utils_1.Unit(this.gasPrice).asWei().toWei();
-                        }
-                        value = txParams.value !== undefined && utils_1.isHex(txParams.value) ? txParams.value : '0';
-                        nonce = txParams.nonce !== undefined && utils_1.isHex(txParams.nonce)
-                            ? Number.parseInt(utils_1.hexToNumber(txParams.nonce), 10)
-                            : Number.parseInt(utils_1.hexToNumber(accountNonce.result), 10);
-                        data = txParams.data !== undefined && utils_1.isHex(txParams.data) ? txParams.data : '0x';
-                        prv = this.wallets[from].privateKey;
-                        signerAccount = new account_1.Account(prv, this.messenger);
-                        tx = new transaction_1.Transaction(tslib_1.__assign(tslib_1.__assign({}, txParams), { from: from,
-                            to: to,
-                            gasLimit: gasLimit,
-                            gasPrice: gasPrice,
-                            value: value,
-                            nonce: nonce,
-                            data: data, shardID: this.shardID, chainId: this.messenger.chainId }), this.messenger, transaction_1.TxStatus.INTIALIZED);
-                        return [4 /*yield*/, signerAccount.signTransaction(tx)];
-                    case 2:
-                        signed = _a.sent();
-                        return [2 /*return*/, signed.getRawTransaction()];
-                }
-            });
-        });
-    };
-    HDNode.prototype.getAddress = function (idx) {
-        if (!idx) {
-            return this.addresses[0];
-        }
-        else {
-            return this.addresses[idx];
-        }
-    };
-    HDNode.prototype.getAddresses = function () {
-        return this.addresses;
-    };
-    HDNode.prototype.addByPrivateKey = function (privateKey) {
-        var account = new account_1.Account(privateKey);
-        var addr = account.checksumAddress;
-        this.addresses.push(addr);
-        this.wallets[addr] = account;
-        return addr;
-    };
-    HDNode.prototype.setSigner = function (address) {
-        var foundIndex = this.addresses.findIndex(function (value) { return value === address; });
-        this.addresses.slice(foundIndex, foundIndex + 1);
-        this.addresses.unshift(address);
-    };
-    return HDNode;
-}());
-exports.HDNode = HDNode;
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","@harmony-js/transaction":"../node_modules/@harmony-js/transaction/dist/index.js","./account":"../node_modules/@harmony-js/account/dist/account.js"}],"../node_modules/@harmony-js/account/dist/index.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-account
- * @ignore
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-var tslib_1 = require("tslib");
-tslib_1.__exportStar(require("./account"), exports);
-tslib_1.__exportStar(require("./wallet"), exports);
-tslib_1.__exportStar(require("./types"), exports);
-tslib_1.__exportStar(require("./utils"), exports);
-tslib_1.__exportStar(require("./hdnode"), exports);
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","./account":"../node_modules/@harmony-js/account/dist/account.js","./wallet":"../node_modules/@harmony-js/account/dist/wallet.js","./types":"../node_modules/@harmony-js/account/dist/types.js","./utils":"../node_modules/@harmony-js/account/dist/utils.js","./hdnode":"../node_modules/@harmony-js/account/dist/hdnode.js"}],"../node_modules/@harmony-js/contract/dist/models/AbiItemModel.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AbiItem = void 0;
-var utils_1 = require("@harmony-js/utils");
-var AbiItem = /** @class */ (function () {
-    // constructor
-    function AbiItem(abiItem) {
-        this.abiItem = abiItem;
-        this.signature = this.abiItem.signature;
-        this.name = this.abiItem.name;
-        this.payable = this.abiItem.payable;
-        this.anonymous = this.abiItem.anonymous;
-        this.type = this.abiItem.type;
-        this.inputs = this.abiItem.inputs;
-        this.outputs = this.abiItem.outputs;
-        this.contractMethodParameters = [];
-    }
-    AbiItem.prototype.getInputLength = function () {
-        if (utils_1.isArray(this.abiItem.inputs)) {
-            return this.abiItem.inputs.length;
-        }
-        return 0;
-    };
-    AbiItem.prototype.getInputs = function () {
-        if (utils_1.isArray(this.abiItem.inputs)) {
-            return this.abiItem.inputs;
-        }
-        return [];
-    };
-    AbiItem.prototype.getOutputs = function () {
-        if (utils_1.isArray(this.abiItem.outputs)) {
-            return this.abiItem.outputs;
-        }
-        return [];
-    };
-    AbiItem.prototype.getIndexedInputs = function () {
-        return this.getInputs().filter(function (input) {
-            return input.indexed === true;
-        });
-    };
-    AbiItem.prototype.isOfType = function (type) {
-        return this.abiItem.type === type;
-    };
-    return AbiItem;
-}());
-exports.AbiItem = AbiItem;
-
-},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/models/AbiModel.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AbiModel = void 0;
-var AbiModel = /** @class */ (function () {
-    function AbiModel(mappedAbi) {
-        this.abi = mappedAbi;
-    }
-    AbiModel.prototype.getMethod = function (name) {
-        if (this.hasMethod(name)) {
-            return this.abi.methods[name];
-        }
-        return false;
-    };
-    AbiModel.prototype.getMethods = function () {
-        return this.abi.methods;
-    };
-    AbiModel.prototype.getEvent = function (name) {
-        if (this.hasEvent(name)) {
-            return this.abi.events[name];
-        }
-        return false;
-    };
-    AbiModel.prototype.getEvents = function () {
-        return this.abi.events;
-    };
-    AbiModel.prototype.getEventBySignature = function (signature) {
-        var _this = this;
-        var event;
-        Object.keys(this.abi.events).forEach(function (key) {
-            if (_this.abi.events[key].signature === signature) {
-                event = _this.abi.events[key];
-            }
-        });
-        return event;
-    };
-    AbiModel.prototype.hasMethod = function (name) {
-        return typeof this.abi.methods[name] !== 'undefined';
-    };
-    AbiModel.prototype.hasEvent = function (name) {
-        return typeof this.abi.events[name] !== 'undefined';
-    };
-    return AbiModel;
-}());
-exports.AbiModel = AbiModel;
-
-},{}],"../node_modules/@harmony-js/contract/dist/utils/mapper.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.isPayable = exports.isConstant = exports.abiMapper = void 0;
-var utils_1 = require("@harmony-js/utils");
-var AbiItemModel_1 = require("../models/AbiItemModel");
-var AbiModel_1 = require("../models/AbiModel");
-var utils_2 = require("../abi/utils");
-exports.abiMapper = function (abi, abiCoder) {
-    var mappedAbiItems = {
-        methods: {},
-        events: {},
-    };
-    var hasConstructor = false;
-    abi.forEach(function (abiItem) {
-        abiItem.constant = exports.isConstant(abiItem);
-        abiItem.payable = exports.isPayable(abiItem);
-        if (abiItem.name) {
-            abiItem.funcName = utils_2.jsonInterfaceMethodToString(abiItem);
-        }
-        var abiItemModel;
-        if (abiItem.type === 'function') {
-            abiItem.signature = abiCoder.encodeFunctionSignature(abiItem.funcName);
-            abiItemModel = new AbiItemModel_1.AbiItem(abiItem);
-            // Check if an method already exists with this name and if it exists than create an array and push this abiItem
-            // into it. This will be used if there are methods with the same name but with different arguments.
-            if (!mappedAbiItems.methods[abiItem.name]) {
-                mappedAbiItems.methods[abiItem.name] = abiItemModel;
-            }
-            else {
-                if (utils_1.isArray(mappedAbiItems.methods[abiItem.name])) {
-                    mappedAbiItems.methods[abiItem.name].push(abiItemModel);
-                }
-                else {
-                    mappedAbiItems.methods[abiItem.name] = [
-                        mappedAbiItems.methods[abiItem.name],
-                        abiItemModel,
-                    ];
-                }
-            }
-            mappedAbiItems.methods[abiItem.signature] = abiItemModel;
-            mappedAbiItems.methods[abiItem.funcName] = abiItemModel;
-            return;
-        }
-        if (abiItem.type === 'event') {
-            abiItem.signature = abiCoder.encodeEventSignature(abiItem.funcName);
-            abiItemModel = new AbiItemModel_1.AbiItem(abiItem);
-            if (!mappedAbiItems.events[abiItem.name] ||
-                mappedAbiItems.events[abiItem.name].name === 'bound ') {
-                mappedAbiItems.events[abiItem.name] = abiItemModel;
-            }
-            mappedAbiItems.events[abiItem.signature] = abiItemModel;
-            mappedAbiItems.events[abiItem.funcName] = abiItemModel;
-        }
-        if (abiItem.type === 'constructor') {
-            abiItem.signature = abiItem.type;
-            // tslint:disable-next-line: no-string-literal
-            mappedAbiItems.methods['contractConstructor'] = new AbiItemModel_1.AbiItem(abiItem);
-            hasConstructor = true;
-        }
-    });
-    if (!hasConstructor) {
-        // tslint:disable-next-line: no-string-literal
-        mappedAbiItems.methods['contractConstructor'] = new AbiItemModel_1.AbiItem({
-            inputs: [],
-            payable: false,
-            constant: false,
-            type: 'constructor',
-        });
-    }
-    return new AbiModel_1.AbiModel(mappedAbiItems);
-};
-exports.isConstant = function (abiItem) {
-    return (abiItem.stateMutability === 'view' || abiItem.stateMutability === 'pure' || abiItem.constant);
-};
-exports.isPayable = function (abiItem) {
-    return abiItem.stateMutability === 'payable' || abiItem.payable;
-};
-
-},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","../models/AbiItemModel":"../node_modules/@harmony-js/contract/dist/models/AbiItemModel.js","../models/AbiModel":"../node_modules/@harmony-js/contract/dist/models/AbiModel.js","../abi/utils":"../node_modules/@harmony-js/contract/dist/abi/utils.js"}],"../node_modules/@harmony-js/contract/dist/utils/encoder.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.eventFilterEncoder = exports.methodEncoder = void 0;
-var utils_1 = require("@harmony-js/utils");
-exports.methodEncoder = function (abiCoder, abiItemModel, deployData) {
-    var encodedParameters = abiCoder.encodeParameters(abiItemModel.getInputs(), abiItemModel.contractMethodParameters);
-    if (encodedParameters.startsWith('0x')) {
-        encodedParameters = encodedParameters.slice(2);
-    }
-    if (abiItemModel.isOfType('constructor')) {
-        if (!deployData) {
-            throw new Error('The contract has no contract data option set. This is necessary to append the constructor parameters.');
-        }
-        return deployData + encodedParameters;
-    }
-    if (abiItemModel.isOfType('function')) {
-        return abiItemModel.signature + encodedParameters;
-    }
-    return encodedParameters;
-};
-exports.eventFilterEncoder = function (abiCoder, abiItemModel, filter) {
-    var topics = [];
-    abiItemModel.getIndexedInputs().forEach(function (input) {
-        if (filter[input.name]) {
-            var filterItem = filter[input.name];
-            if (utils_1.isArray(filterItem)) {
-                filterItem = filterItem.map(function (item) {
-                    return abiCoder.encodeParameter(input.type, item);
-                });
-                topics.push(filterItem);
-                return;
-            }
-            topics.push(abiCoder.encodeParameter(input.type, filterItem));
-            return;
-        }
-        topics.push(null);
-    });
-    return topics;
-};
-
-},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/@harmony-js/contract/dist/utils/status.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ContractStatus = void 0;
-var ContractStatus;
-(function (ContractStatus) {
-    ContractStatus["INITIALISED"] = "initialised";
-    ContractStatus["TESTED"] = "tested";
-    ContractStatus["ERROR"] = "error";
-    ContractStatus["SIGNED"] = "signed";
-    ContractStatus["SENT"] = "sent";
-    ContractStatus["REJECTED"] = "rejected";
-    ContractStatus["DEPLOYED"] = "deployed";
-    ContractStatus["CALLED"] = "called";
-})(ContractStatus = exports.ContractStatus || (exports.ContractStatus = {}));
-
-},{}],"../node_modules/@harmony-js/contract/dist/methods/method.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ContractMethod = void 0;
-var tslib_1 = require("tslib");
-var transaction_1 = require("@harmony-js/transaction");
-var network_1 = require("@harmony-js/network");
-var utils_1 = require("@harmony-js/utils");
-var crypto_1 = require("@harmony-js/crypto");
-var encoder_1 = require("../utils/encoder");
-var status_1 = require("../utils/status");
-// todo: have to judge if it is contractConstructor
-var ContractMethod = /** @class */ (function () {
-    function ContractMethod(methodKey, params, abiItem, contract) {
-        this.methodKey = methodKey;
-        this.contract = contract;
-        this.wallet = contract.wallet;
-        this.params = params;
-        this.abiItem = abiItem;
-        this.transaction = this.createTransaction();
-        this.callPayload = undefined;
-        this.callResponse = undefined;
-    }
-    ContractMethod.prototype.send = function (params) {
-        var _this = this;
-        try {
-            var gasLimit_1;
-            var signTxs_1 = function () {
-                _this.transaction = _this.transaction.map(function (tx) {
-                    return tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, tx), params), { gasLimit: gasLimit_1 });
-                });
-                var waitConfirm = params && params.waitConfirm === false ? false : true;
-                var updateNonce = params && params.nonce !== undefined ? false : true;
-                _this.signTransaction(updateNonce)
-                    .then(function (signed) {
-                    _this.sendTransaction(signed).then(function (sent) {
-                        var _a = tslib_1.__read(sent, 2), txn = _a[0], id = _a[1];
-                        _this.transaction = txn;
-                        _this.contract.transaction = _this.transaction;
-                        if (_this.transaction.isRejected()) {
-                            _this.transaction.emitter.reject(id); // in this case, id is error message
-                        }
-                        else if (waitConfirm) {
-                            _this.confirm(id).then(function () {
-                                _this.transaction.emitter.resolve(_this.contract);
-                            });
-                        }
-                        else {
-                            _this.transaction.emitter.resolve(_this.contract);
-                        }
-                    });
-                })
-                    .catch(function (error) {
-                    _this.transaction.emitter.reject(error);
-                });
-            };
-            // tslint:disable-next-line: prefer-conditional-expression
-            if (params !== undefined) {
-                gasLimit_1 = params.gas || params.gasLimit;
-            }
-            if (gasLimit_1 === undefined) {
-                this.estimateGas().then(function (gas) {
-                    gasLimit_1 = utils_1.hexToBN(gas);
-                    signTxs_1();
-                });
-            }
-            else {
-                signTxs_1();
-            }
-            return this.transaction.emitter;
-        }
-        catch (error) {
-            throw error;
-        }
-    };
-    ContractMethod.prototype.call = function (options, blockNumber) {
-        if (blockNumber === void 0) { blockNumber = 'latest'; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var shardID, nonce_1, gasLimit_2, from_1, keys, txPayload, sendPayload, keys_1, keys_1_1, key, result, error_1;
-            var e_1, _a;
-            return tslib_1.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _b.trys.push([0, 2, , 3]);
-                        options = tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, this.contract.options), { data: this.transaction.txParams.data }), options);
-                        shardID = options !== undefined && options.shardID !== undefined
-                            ? options.shardID
-                            : this.contract.shardID;
-                        nonce_1 = '0x0';
-                        gasLimit_2 = '21000000';
-                        if (options !== undefined && (options.gas || options.gasLimit)) {
-                            gasLimit_2 = options.gas || options.gasLimit;
-                        }
-                        from_1 = this.wallet.signer
-                            ? this.wallet.signer.address
-                            : '0x0000000000000000000000000000000000000000';
-                        if (options && options.from) {
-                            from_1 = options.from;
-                        }
-                        this.transaction = this.transaction.map(function (tx) {
-                            return tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, tx), options), { from: from_1 || tx.from, gasPrice: options ? options.gasPrice : tx.gasPrice, gasLimit: gasLimit_2 || tx.gasLimit, nonce: Number.parseInt(utils_1.hexToNumber(nonce_1), 10) });
-                        });
-                        keys = Object.keys(this.transaction.txPayload);
-                        txPayload = this.transaction.txPayload;
-                        sendPayload = {};
-                        try {
-                            for (keys_1 = tslib_1.__values(keys), keys_1_1 = keys_1.next(); !keys_1_1.done; keys_1_1 = keys_1.next()) {
-                                key = keys_1_1.value;
-                                // tslint:disable-next-line: no-unused-expression
-                                if (txPayload[key] !== '0x') {
-                                    sendPayload[key] = txPayload[key];
-                                }
-                            }
-                        }
-                        catch (e_1_1) { e_1 = { error: e_1_1 }; }
-                        finally {
-                            try {
-                                if (keys_1_1 && !keys_1_1.done && (_a = keys_1.return)) _a.call(keys_1);
-                            }
-                            finally { if (e_1) throw e_1.error; }
-                        }
-                        // tslint:disable-line
-                        return [4 /*yield*/, this.wallet.messenger.send(network_1.RPCMethod.Call, [sendPayload, blockNumber], 
-                            // tslint:disable-line
-                            this.wallet.messenger.chainPrefix, shardID)];
-                    case 1:
-                        result = 
-                        // tslint:disable-line
-                        _b.sent();
-                        this.callPayload = sendPayload;
-                        this.callResponse = result;
-                        if (result.isError()) {
-                            throw result.message;
-                        }
-                        else if (result.isResult()) {
-                            if (result.result === null) {
-                                return [2 /*return*/, this.afterCall(undefined)];
-                            }
-                            else {
-                                return [2 /*return*/, this.afterCall(result.result)];
-                            }
-                        }
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_1 = _b.sent();
-                        throw error_1;
-                    case 3: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    ContractMethod.prototype.estimateGas = function (params) {
-        if (params === void 0) { params = {}; }
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var result, _a, error_2;
-            return tslib_1.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _b.trys.push([0, 2, , 3]);
-                        if (params.from === undefined && this.contract.options.from !== undefined) {
-                            params.from = this.contract.options.from;
-                        }
-                        if (params.to === undefined && this.transaction.txParams.to !== undefined) {
-                            params.to = this.transaction.txParams.to;
-                        }
-                        if (params.data === undefined) {
-                            params.data = this.transaction.txParams.data;
-                        }
-                        if (params.gasPrice === undefined && this.contract.options.gasPrice !== undefined) {
-                            params.gasPrice = this.contract.options.gasPrice;
-                        }
-                        if (this.methodKey === 'contractConstructor') {
-                            delete params.to;
-                        }
-                        _a = network_1.getResultForData;
-                        // tslint:disable-line
-                        return [4 /*yield*/, this.wallet.messenger.send(network_1.RPCMethod.EstimateGas, [params])];
-                    case 1:
-                        result = _a.apply(void 0, [
-                            // tslint:disable-line
-                            _b.sent()]);
-                        if (result.responseType === 'error') {
-                            throw result.message;
-                        }
-                        else if (result.responseType === 'raw') {
-                            throw new Error('Get estimateGas fail');
-                        }
-                        else {
-                            return [2 /*return*/, result];
-                        }
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_2 = _b.sent();
-                        throw error_2;
-                    case 3: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    ContractMethod.prototype.encodeABI = function () {
-        return encoder_1.methodEncoder(this.contract.abiCoder, this.abiItem, this.contract.data);
-    };
-    ContractMethod.prototype.debug = function () {
-        return {
-            callResponse: this.callResponse,
-            callPayload: this.callPayload,
-        };
-    };
-    ContractMethod.prototype.signTransaction = function (updateNonce) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var signed, _a, error_3;
-            return tslib_1.__generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        _b.trys.push([0, 5, , 6]);
-                        signed = void 0;
-                        if (!this.wallet.signer) return [3 /*break*/, 2];
-                        return [4 /*yield*/, this.wallet.signTransaction(this.transaction, this.wallet.signer, undefined, updateNonce, 'rlp', 'latest')];
-                    case 1:
-                        _a = _b.sent();
-                        return [3 /*break*/, 4];
-                    case 2: return [4 /*yield*/, this.wallet.signTransaction(this.transaction, updateNonce, 'rlp', 'latest')];
-                    case 3:
-                        _a = _b.sent();
-                        _b.label = 4;
-                    case 4:
-                        signed = _a;
-                        if (this.methodKey === 'contractConstructor') {
-                            this.contract.address = transaction_1.TransactionFactory.getContractAddress(signed);
-                        }
-                        this.contract.setStatus(status_1.ContractStatus.SIGNED);
-                        return [2 /*return*/, signed];
-                    case 5:
-                        error_3 = _b.sent();
-                        throw error_3;
-                    case 6: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    ContractMethod.prototype.sendTransaction = function (signed) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var result, error_4;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, signed.sendTransaction()];
-                    case 1:
-                        result = _a.sent();
-                        this.contract.setStatus(status_1.ContractStatus.SENT);
-                        return [2 /*return*/, result];
-                    case 2:
-                        error_4 = _a.sent();
-                        throw error_4;
-                    case 3: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    ContractMethod.prototype.confirm = function (id) {
-        return tslib_1.__awaiter(this, void 0, void 0, function () {
-            var result, error_5;
-            return tslib_1.__generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        _a.trys.push([0, 2, , 3]);
-                        return [4 /*yield*/, this.transaction.confirm(id, 20, 1000, this.transaction ? this.transaction.txParams.shardID : this.contract.shardID)];
-                    case 1:
-                        result = _a.sent();
-                        if (result.receipt && result.txStatus === transaction_1.TxStatus.CONFIRMED) {
-                            if (this.methodKey === 'contractConstructor') {
-                                this.contract.setStatus(status_1.ContractStatus.DEPLOYED);
-                            }
-                            else {
-                                this.contract.setStatus(status_1.ContractStatus.CALLED);
-                            }
-                        }
-                        else {
-                            this.contract.setStatus(status_1.ContractStatus.REJECTED);
-                        }
-                        return [3 /*break*/, 3];
-                    case 2:
-                        error_5 = _a.sent();
-                        throw error_5;
-                    case 3: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    ContractMethod.prototype.createTransaction = function () {
-        if (this.wallet.messenger) {
-            if (this.methodKey === 'contractConstructor') {
-                // tslint:disable-next-line: no-string-literal
-                this.contract.data = this.params[0]['data'] || '0x';
-                this.abiItem.contractMethodParameters =
-                    // tslint:disable-next-line: no-string-literal
-                    this.params[0]['arguments'] || [];
-            }
-            else {
-                this.abiItem.contractMethodParameters = this.params || [];
-            }
-            var txObject = tslib_1.__assign(tslib_1.__assign(tslib_1.__assign({}, this.contract.options), this.params[0]), { to: this.methodKey === 'contractConstructor'
-                    ? '0x'
-                    : crypto_1.getAddress(this.contract.address).checksum, data: this.encodeABI() });
-            // tslint:disable-line
-            var result = new transaction_1.TransactionFactory(this.wallet.messenger).newTx(txObject);
-            return result;
-        }
-        else {
-            throw new Error('Messenger is not found');
-        }
-    };
-    ContractMethod.prototype.afterCall = function (response) {
-        // length of `0x${methodSig}` is 2+4*2=10
-        if (response.length % 32 === 10 && response.startsWith(this.contract.errorFuncSig)) {
-            var errmsg = this.contract.abiCoder.decodeParameters([{ type: 'string' }], '0x' + response.slice(10));
-            throw { revert: errmsg[0] };
-        }
-        if (this.methodKey === 'contractConstructor') {
-            return response;
-        }
-        var outputs = this.abiItem.getOutputs();
-        if (outputs.length === 0) {
-            // if outputs is empty, we can't know the call is revert or not
-            return response;
-        }
-        if (!response || response === '0x') {
-            // if outputs isn't empty, treat it as revert
-            throw { revert: response };
-        }
-        if (outputs.length > 1) {
-            return this.contract.abiCoder.decodeParameters(outputs, response);
-        }
-        return this.contract.abiCoder.decodeParameter(outputs[0], response);
-        // return outputs;
-    };
-    return ContractMethod;
-}());
-exports.ContractMethod = ContractMethod;
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/transaction":"../node_modules/@harmony-js/transaction/dist/index.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","../utils/encoder":"../node_modules/@harmony-js/contract/dist/utils/encoder.js","../utils/status":"../node_modules/@harmony-js/contract/dist/utils/status.js"}],"../node_modules/@harmony-js/contract/dist/methods/methodFactory.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.MethodFactory = void 0;
-var method_1 = require("./method");
-var MethodFactory = /** @class */ (function () {
-    // constructor
-    function MethodFactory(contract) {
-        this.contract = contract;
-        this.abiModel = this.contract.abiModel;
-        this.abiCoder = this.contract.abiCoder;
-        this.methodKeys = this.mapMethodKeys();
-    }
-    MethodFactory.prototype.addMethodsToContract = function () {
-        var _this = this;
-        this.methodKeys.forEach(function (key) {
-            var newObject = {};
-            newObject[key] = function () {
-                var params = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    params[_i] = arguments[_i];
-                }
-                return new method_1.ContractMethod(key, params, _this.abiModel.getMethod(key), _this.contract);
-            };
-            Object.assign(_this.contract.methods, newObject);
-        });
-        return this.contract;
-    };
-    /**
-     * @function mapMethodKeys
-     * @return {string[]} {description}
-     */
-    MethodFactory.prototype.mapMethodKeys = function () {
-        return Object.keys(this.abiModel.abi.methods);
-    };
-    return MethodFactory;
-}());
-exports.MethodFactory = MethodFactory;
-
-},{"./method":"../node_modules/@harmony-js/contract/dist/methods/method.js"}],"../node_modules/@harmony-js/contract/dist/utils/decoder.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.decode = void 0;
-exports.decode = function (abiCoder, abiItemModel, response) {
-    var argumentTopics = response.topics;
-    if (!abiItemModel.anonymous) {
-        argumentTopics = response.topics.slice(1);
-    }
-    if (response.data === '0x') {
-        response.data = null;
-    }
-    response.returnValues = abiCoder.decodeLog(abiItemModel.getInputs(), response.data, argumentTopics);
-    response.event = abiItemModel.name;
-    response.signature = abiItemModel.signature;
-    response.raw = {
-        data: response.data,
-        topics: response.topics,
-    };
-    if (abiItemModel.anonymous || !response.topics[0]) {
-        response.signature = null;
-    }
-    delete response.data;
-    delete response.topics;
-    return response;
-};
-
-},{}],"../node_modules/@harmony-js/contract/dist/utils/formatter.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.toTopic = exports.inputAddressFormatter = exports.isPredefinedBlockNumber = exports.inputBlockNumberFormatter = exports.outputLogFormatter = exports.inputLogFormatter = void 0;
-var crypto_1 = require("@harmony-js/crypto");
-var utils_1 = require("@harmony-js/utils");
-var abiCoder_1 = require("../abi/abiCoder");
-exports.inputLogFormatter = function (options) {
-    if (options.fromBlock) {
-        options.fromBlock = exports.inputBlockNumberFormatter(options.fromBlock);
-    }
-    if (options.toBlock) {
-        options.toBlock = exports.inputBlockNumberFormatter(options.toBlock);
-    }
-    // make sure topics, get converted to hex
-    options.topics = options.topics || [];
-    options.topics = options.topics.map(function (topic) {
-        return utils_1.isArray(topic) ? topic.map(exports.toTopic) : exports.toTopic(topic);
-    });
-    if (options.address) {
-        if (utils_1.isArray(options.address)) {
-            options.address = options.address.map(function (addr) {
-                return exports.inputAddressFormatter(addr);
-            });
-        }
-        else {
-            options.address = exports.inputAddressFormatter(options.address);
-        }
-    }
-    return options;
-};
-/**
- * Formats the output of a log
- *
- * @method outputLogFormatter
- *
- * @param {Object} log object
- *
- * @returns {Object} log
- */
-exports.outputLogFormatter = function (log) {
-    // generate a custom log id
-    if (typeof log.blockHash === 'string' &&
-        typeof log.transactionHash === 'string' &&
-        typeof log.logIndex === 'string') {
-        var shaId = crypto_1.keccak256('0x' +
-            log.blockHash.replace('0x', '') +
-            log.transactionHash.replace('0x', '') +
-            log.logIndex.replace('0x', ''));
-        shaId.replace('0x', '').substr(0, 8);
-        log.id = "log_" + shaId;
-    }
-    else if (!log.id) {
-        log.id = null;
-    }
-    if (log.blockNumber !== null) {
-        log.blockNumber = utils_1.hexToBN(log.blockNumber).toNumber();
-    }
-    if (log.transactionIndex !== null) {
-        log.transactionIndex = utils_1.hexToBN(log.transactionIndex).toNumber();
-    }
-    if (log.logIndex !== null) {
-        log.logIndex = utils_1.hexToBN(log.logIndex).toNumber();
-    }
-    if (log.address) {
-        log.address = crypto_1.toChecksumAddress(log.address);
-    }
-    return log;
-};
-exports.inputBlockNumberFormatter = function (blockNumber) {
-    if (blockNumber === undefined || blockNumber === null || exports.isPredefinedBlockNumber(blockNumber)) {
-        return blockNumber;
-    }
-    if (crypto_1.isHexString(blockNumber)) {
-        if (utils_1.isString(blockNumber)) {
-            return blockNumber.toLowerCase();
-        }
-        return blockNumber;
-    }
-    return utils_1.numberToHex(blockNumber);
-};
-exports.isPredefinedBlockNumber = function (blockNumber) {
-    return blockNumber === 'latest' || blockNumber === 'pending' || blockNumber === 'earliest';
-};
-exports.inputAddressFormatter = function (address) {
-    if (utils_1.isAddress(address)) {
-        return "0x" + address.toLowerCase().replace('0x', '');
-    }
-    throw new Error("Provided address \"" + address + "\" is invalid, the capitalization checksum test failed, or its an indrect IBAN address which can't be converted.");
-};
-exports.toTopic = function (value) {
-    if (value === null || typeof value === 'undefined') {
-        return null;
-    }
-    value = String(value);
-    if (value.indexOf('0x') === 0) {
-        return value;
-    }
-    return crypto_1.hexlify(abiCoder_1.toUtf8Bytes(value));
-};
-
-},{"@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","../abi/abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js"}],"../node_modules/@harmony-js/contract/dist/events/event.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.EventMethod = void 0;
-var tslib_1 = require("tslib");
-var network_1 = require("@harmony-js/network");
-var decoder_1 = require("../utils/decoder");
-var formatter_1 = require("../utils/formatter");
-var EventMethod = /** @class */ (function (_super) {
-    tslib_1.__extends(EventMethod, _super);
-    function EventMethod(methodKey, params, abiItem, contract) {
-        var _this = _super.call(this, formatter_1.inputLogFormatter(params), contract.wallet.messenger, contract.shardID) || this;
-        _this.methodKey = methodKey;
-        _this.contract = contract;
-        _this.params = params;
-        _this.abiItem = abiItem;
-        return _this;
-        // this.subscribe();
-    }
-    // call() {}
-    // estimateGas() {}
-    // encodeABI() {}
-    EventMethod.prototype.onNewSubscriptionItem = function (subscriptionItem) {
-        var formatted = formatter_1.outputLogFormatter(subscriptionItem.method !== undefined ? subscriptionItem.params.result : subscriptionItem);
-        var log = decoder_1.decode(this.contract.abiCoder, this.abiItem, formatted);
-        if (log.removed && this.emitter) {
-            this.emitter.emit('changed', log);
-        }
-        return log;
-    };
-    return EventMethod;
-}(network_1.LogSub));
-exports.EventMethod = EventMethod;
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","@harmony-js/network":"../node_modules/@harmony-js/network/dist/index.js","../utils/decoder":"../node_modules/@harmony-js/contract/dist/utils/decoder.js","../utils/formatter":"../node_modules/@harmony-js/contract/dist/utils/formatter.js"}],"../node_modules/@harmony-js/contract/dist/events/eventFactory.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.EventFactory = void 0;
-var utils_1 = require("@harmony-js/utils");
-var event_1 = require("./event");
-var formatter_1 = require("../utils/formatter");
-var encoder_1 = require("../utils/encoder");
-var EventFactory = /** @class */ (function () {
-    // constructor
-    function EventFactory(contract) {
-        this.contract = contract;
-        this.abiModel = this.contract.abiModel;
-        this.abiCoder = this.contract.abiCoder;
-        this.eventKeys = this.mapEventKeys();
-    }
-    EventFactory.prototype.addEventsToContract = function () {
-        var _this = this;
-        this.eventKeys.forEach(function (key) {
-            var newObject = {};
-            newObject[key] = function (params) {
-                return new event_1.EventMethod(key, 
-                // params,
-                _this.map(_this.abiModel.getEvent(key), _this.contract, params), _this.abiModel.getEvent(key), _this.contract);
-            };
-            Object.assign(_this.contract.events, newObject);
-        });
-        return this.contract;
-    };
-    /**
-     * @function mapMethodKeys
-     * @return {string[]} {description}
-     */
-    EventFactory.prototype.mapEventKeys = function () {
-        return Object.keys(this.abiModel.abi.events);
-    };
-    EventFactory.prototype.map = function (abiItemModel, contract, options) {
-        if (!options) {
-            options = {};
-        }
-        if (!utils_1.isArray(options.topics)) {
-            options.topics = [];
-        }
-        if (typeof options.fromBlock !== 'undefined') {
-            options.fromBlock = formatter_1.inputBlockNumberFormatter(options.fromBlock);
-        }
-        // else if (contract.defaultBlock !== null) {
-        //   options.fromBlock = contract.defaultBlock;
-        // }
-        if (typeof options.toBlock !== 'undefined') {
-            options.toBlock = formatter_1.inputBlockNumberFormatter(options.toBlock);
-        }
-        if (typeof options.filter !== 'undefined') {
-            options.topics = options.topics.concat(encoder_1.eventFilterEncoder(this.abiCoder, abiItemModel, options.filter));
-            delete options.filter;
-        }
-        if (!abiItemModel.anonymous) {
-            options.topics.unshift(abiItemModel.signature);
-        }
-        if (!options.address) {
-            options.address = contract.address;
-        }
-        return options;
-    };
-    return EventFactory;
-}());
-exports.EventFactory = EventFactory;
-
-},{"@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","./event":"../node_modules/@harmony-js/contract/dist/events/event.js","../utils/formatter":"../node_modules/@harmony-js/contract/dist/utils/formatter.js","../utils/encoder":"../node_modules/@harmony-js/contract/dist/utils/encoder.js"}],"../node_modules/@harmony-js/contract/dist/contract.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- *
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Contract = void 0;
-var account_1 = require("@harmony-js/account");
-var index_1 = require("./abi/index");
-var mapper_1 = require("./utils/mapper");
-var methodFactory_1 = require("./methods/methodFactory");
-var eventFactory_1 = require("./events/eventFactory");
-var status_1 = require("./utils/status");
-// class Contract
-var Contract = /** @class */ (function () {
-    function Contract(abi, address, options, wallet, status) {
-        if (abi === void 0) { abi = []; }
-        if (address === void 0) { address = '0x'; }
-        if (options === void 0) { options = {}; }
-        if (status === void 0) { status = status_1.ContractStatus.INITIALISED; }
-        this.abi = [];
-        this.errorFunc = 'Error(string)';
-        // super();
-        this.abi = abi;
-        this.abiCoder = index_1.AbiCoder();
-        this.abiModel = mapper_1.abiMapper(abi, this.abiCoder);
-        this.options = options;
-        this.address = this.options.address || address;
-        this.shardID = this.options.shardID || wallet.messenger.currentShard;
-        this.wallet = wallet;
-        this.methods = {};
-        this.events = {};
-        this.runMethodFactory();
-        this.runEventFactory();
-        this.status = status;
-        this.errorFuncSig = this.abiCoder.encodeFunctionSignature(this.errorFunc);
-        // tslint:disable-next-line: no-unused-expression
-    }
-    Contract.prototype.isInitialised = function () {
-        return this.status === status_1.ContractStatus.INITIALISED;
-    };
-    Contract.prototype.isSigned = function () {
-        return this.status === status_1.ContractStatus.SIGNED;
-    };
-    Contract.prototype.isSent = function () {
-        return this.status === status_1.ContractStatus.SENT;
-    };
-    Contract.prototype.isDeployed = function () {
-        return this.status === status_1.ContractStatus.DEPLOYED;
-    };
-    Contract.prototype.isRejected = function () {
-        return this.status === status_1.ContractStatus.REJECTED;
-    };
-    Contract.prototype.isCalled = function () {
-        return this.status === status_1.ContractStatus.CALLED;
-    };
-    Contract.prototype.setStatus = function (status) {
-        this.status = status;
-    };
-    Object.defineProperty(Contract.prototype, "jsonInterface", {
-        get: function () {
-            return this.abiModel;
-        },
-        set: function (value) {
-            this.abiModel = mapper_1.abiMapper(value, this.abiCoder);
-            this.runMethodFactory();
-            this.runEventFactory();
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(Contract.prototype, "address", {
-        get: function () {
-            return this.options.address || this.address;
-        },
-        set: function (value) {
-            this.options.address = value;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    Object.defineProperty(Contract.prototype, "data", {
-        get: function () {
-            return this.options.data;
-        },
-        set: function (value) {
-            this.options.data = value;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    // deploy
-    Contract.prototype.deploy = function (options) {
-        return this.methods.contractConstructor(options);
-    };
-    Contract.prototype.runMethodFactory = function () {
-        return new methodFactory_1.MethodFactory(this).addMethodsToContract();
-    };
-    Contract.prototype.runEventFactory = function () {
-        return new eventFactory_1.EventFactory(this).addEventsToContract();
-    };
-    Contract.prototype.connect = function (wallet) {
-        this.wallet = wallet;
-    };
-    Contract.prototype.setMessegner = function (messenger) {
-        if (this.wallet instanceof account_1.Wallet) {
-            this.wallet.setMessenger(messenger);
-        }
-        else {
-            this.wallet.messenger = messenger;
-        }
-    };
-    return Contract;
-}());
-exports.Contract = Contract;
-
-},{"@harmony-js/account":"../node_modules/@harmony-js/account/dist/index.js","./abi/index":"../node_modules/@harmony-js/contract/dist/abi/index.js","./utils/mapper":"../node_modules/@harmony-js/contract/dist/utils/mapper.js","./methods/methodFactory":"../node_modules/@harmony-js/contract/dist/methods/methodFactory.js","./events/eventFactory":"../node_modules/@harmony-js/contract/dist/events/eventFactory.js","./utils/status":"../node_modules/@harmony-js/contract/dist/utils/status.js"}],"../node_modules/@harmony-js/contract/dist/contractFactory.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ContractFactory = void 0;
-var contract_1 = require("./contract");
-var ContractFactory = /** @class */ (function () {
-    function ContractFactory(wallet) {
-        this.wallet = wallet;
-    }
-    ContractFactory.prototype.createContract = function (abi, address, options) {
-        return new contract_1.Contract(abi, address, options, this.wallet);
-    };
-    return ContractFactory;
-}());
-exports.ContractFactory = ContractFactory;
-
-},{"./contract":"../node_modules/@harmony-js/contract/dist/contract.js"}],"../node_modules/@harmony-js/contract/dist/index.js":[function(require,module,exports) {
-"use strict";
-/**
- * @packageDocumentation
- * @module harmony-contract
- * @hidden
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-var tslib_1 = require("tslib");
-tslib_1.__exportStar(require("./abi/index"), exports);
-var abiCoder_1 = require("./abi/abiCoder");
-Object.defineProperty(exports, "toUtf8Bytes", { enumerable: true, get: function () { return abiCoder_1.toUtf8Bytes; } });
-Object.defineProperty(exports, "toUtf8String", { enumerable: true, get: function () { return abiCoder_1.toUtf8String; } });
-Object.defineProperty(exports, "formatBytes32String", { enumerable: true, get: function () { return abiCoder_1.formatBytes32String; } });
-Object.defineProperty(exports, "parseBytes32String", { enumerable: true, get: function () { return abiCoder_1.parseBytes32String; } });
-var contract_1 = require("./contract");
-Object.defineProperty(exports, "Contract", { enumerable: true, get: function () { return contract_1.Contract; } });
-var contractFactory_1 = require("./contractFactory");
-Object.defineProperty(exports, "ContractFactory", { enumerable: true, get: function () { return contractFactory_1.ContractFactory; } });
-
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","./abi/index":"../node_modules/@harmony-js/contract/dist/abi/index.js","./abi/abiCoder":"../node_modules/@harmony-js/contract/dist/abi/abiCoder.js","./contract":"../node_modules/@harmony-js/contract/dist/contract.js","./contractFactory":"../node_modules/@harmony-js/contract/dist/contractFactory.js"}],"../node_modules/@harmony-js/core/dist/blockchain.js":[function(require,module,exports) {
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","./stakingTransaction":"../node_modules/@harmony-js/staking/dist/stakingTransaction.js","./factory":"../node_modules/@harmony-js/staking/dist/factory.js"}],"../node_modules/@harmony-js/core/dist/blockchain.js":[function(require,module,exports) {
 "use strict";
 /**
  * ## About this package
@@ -80214,67 +80214,14 @@ const {
   ChainType
 } = require('@harmony-js/utils');
 
-var _default = new Harmony(undefined, {
+var _default = new Harmony( // let's assume we deploy smart contract to this end-point URL
+'https://api.s0.b.hmny.io', {
   chainType: ChainType.Harmony,
   chainId: Number(undefined)
 });
 
 exports.default = _default;
-},{"@harmony-js/core":"../node_modules/@harmony-js/core/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"walletSetup.js":[function(require,module,exports) {
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.connectToOneWallet = exports.ONE = exports.options2 = exports.options = exports.options1 = void 0;
-
-var _hmy = _interopRequireDefault(require("./hmy"));
-
-var _account = require("@harmony-js/account");
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-const options1 = {
-  gasPrice: '0x3B9ACA00'
-};
-exports.options1 = options1;
-const options = {
-  gasPrice: 1000000000,
-  gasLimit: 6721900
-};
-exports.options = options;
-const options2 = {
-  gasPrice: 1000000000,
-  gasLimit: 21000
-};
-exports.options2 = options2;
-const ONE = '000000000000000000';
-exports.ONE = ONE;
-
-const connectToOneWallet = async (wallet) => {
-  let {
-    address
-  } = await window.onewallet.getAccount();
-
-  let userAddress = _hmy.default.crypto.getAddress(address).checksum;
-
-  wallet.defaultSigner = userAddress;
-
-  wallet.signTransaction = async tx => {
-    try {
-      tx.from = userAddress;
-      const signTx = await window.onewallet.signTransaction(tx);
-      return signTx;
-    } catch (e) {
-      throw "Something went wrong";
-    }
-
-    return null;
-  };
-};
-
-exports.connectToOneWallet = connectToOneWallet;
-},{"./hmy":"hmy.js","@harmony-js/account":"../node_modules/@harmony-js/account/dist/index.js"}],"contract.js":[function(require,module,exports) {
+},{"@harmony-js/core":"../node_modules/@harmony-js/core/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"contract.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -80282,21 +80229,26 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 
-var _contract = require("@harmony-js/contract");
+var _hmy = _interopRequireDefault(require("./hmy"));
 
 var _fs = _interopRequireDefault(require("fs"));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-const initializeContract = () => {
-  const contract = "{\n  \"contractName\": \"Counter\",\n  \"abi\": [\n    {\n      \"inputs\": [],\n      \"name\": \"incrementCounter\",\n      \"outputs\": [],\n      \"stateMutability\": \"nonpayable\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"decrementCounter\",\n      \"outputs\": [],\n      \"stateMutability\": \"nonpayable\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"addMoney\",\n      \"outputs\": [],\n      \"stateMutability\": \"payable\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"getCount\",\n      \"outputs\": [\n        {\n          \"internalType\": \"uint256\",\n          \"name\": \"\",\n          \"type\": \"uint256\"\n        }\n      ],\n      \"stateMutability\": \"view\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"getMoneyStored\",\n      \"outputs\": [\n        {\n          \"internalType\": \"uint256\",\n          \"name\": \"\",\n          \"type\": \"uint256\"\n        }\n      ],\n      \"stateMutability\": \"view\",\n      \"type\": \"function\"\n    }\n  ],\n  \"metadata\": \"{\\\"compiler\\\":{\\\"version\\\":\\\"0.7.0+commit.9e61f92b\\\"},\\\"language\\\":\\\"Solidity\\\",\\\"output\\\":{\\\"abi\\\":[{\\\"inputs\\\":[],\\\"name\\\":\\\"addMoney\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"payable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"decrementCounter\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getCount\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getMoneyStored\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"incrementCounter\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}],\\\"devdoc\\\":{\\\"kind\\\":\\\"dev\\\",\\\"methods\\\":{},\\\"version\\\":1},\\\"userdoc\\\":{\\\"kind\\\":\\\"user\\\",\\\"methods\\\":{},\\\"version\\\":1}},\\\"settings\\\":{\\\"compilationTarget\\\":{\\\"/home/rachit/Projects/demo/contracts/Counter.sol\\\":\\\"Counter\\\"},\\\"evmVersion\\\":\\\"istanbul\\\",\\\"libraries\\\":{},\\\"metadata\\\":{\\\"bytecodeHash\\\":\\\"ipfs\\\"},\\\"optimizer\\\":{\\\"enabled\\\":false,\\\"runs\\\":200},\\\"remappings\\\":[]},\\\"sources\\\":{\\\"/home/rachit/Projects/demo/contracts/Counter.sol\\\":{\\\"keccak256\\\":\\\"0x1e702f3f7d04fb3a62c3585e9f3a950b95db333308296d454afea31d90404f72\\\",\\\"urls\\\":[\\\"bzz-raw://ae2d4040ed723611feb8760df94f02f540576c1ab9178a0dc575448f4b5b0d3b\\\",\\\"dweb:/ipfs/QmWsM9Vzb6gjA8orRZuJJEaHRq3Km71mYFxhXbaVxE37km\\\"]}},\\\"version\\\":1}\",\n  \"bytecode\": \"0x608060405260008055600060015534801561001957600080fd5b5061015c806100296000396000f3fe60806040526004361061004a5760003560e01c80631b3f48421461004f5780635b34b96614610059578063a87d942c14610070578063e0a438fb1461009b578063f5c5ad83146100c6575b600080fd5b6100576100dd565b005b34801561006557600080fd5b5061006e6100ef565b005b34801561007c57600080fd5b50610085610101565b6040518082815260200191505060405180910390f35b3480156100a757600080fd5b506100b061010a565b6040518082815260200191505060405180910390f35b3480156100d257600080fd5b506100db610114565b005b34600160008282540192505081905550565b60016000808282540192505081905550565b60008054905090565b6000600154905090565b6001600080828254039250508190555056fea2646970667358221220b2c20047e73edf3b3020c78c599df5ecb6d4d6cd4e15836c6a117bffa0b85b3064736f6c63430007000033\",\n  \"deployedBytecode\": \"0x60806040526004361061004a5760003560e01c80631b3f48421461004f5780635b34b96614610059578063a87d942c14610070578063e0a438fb1461009b578063f5c5ad83146100c6575b600080fd5b6100576100dd565b005b34801561006557600080fd5b5061006e6100ef565b005b34801561007c57600080fd5b50610085610101565b6040518082815260200191505060405180910390f35b3480156100a757600080fd5b506100b061010a565b6040518082815260200191505060405180910390f35b3480156100d257600080fd5b506100db610114565b005b34600160008282540192505081905550565b60016000808282540192505081905550565b60008054905090565b6000600154905090565b6001600080828254039250508190555056fea2646970667358221220b2c20047e73edf3b3020c78c599df5ecb6d4d6cd4e15836c6a117bffa0b85b3064736f6c63430007000033\",\n  \"immutableReferences\": {},\n  \"sourceMap\": \"34:478:0:-:0;;;81:1;57:25;;110:1;88:23;;34:478;;;;;;;;;;;;;;;;\",\n  \"deployedSourceMap\": \"34:478:0:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;253:76;;;:::i;:::-;;118:62;;;;;;;;;;;;;:::i;:::-;;335:79;;;;;;;;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;420:90;;;;;;;;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;185:62;;;;;;;;;;;;;:::i;:::-;;253:76;313:9;298:11;;:24;;;;;;;;;;;253:76::o;118:62::-;172:1;163:5;;:10;;;;;;;;;;;118:62::o;335:79::-;376:7;402:5;;395:12;;335:79;:::o;420:90::-;467:7;492:11;;485:18;;420:90;:::o;185:62::-;239:1;230:5;;:10;;;;;;;;;;;185:62::o\",\n  \"source\": \"pragma solidity >=0.4.22 <0.8.0;\\n\\ncontract Counter {\\n    uint256 private count = 0;\\n    uint256 moneyStored = 0;\\n\\n    function incrementCounter() public {\\n        count += 1;\\n    }\\n    function decrementCounter() public {\\n        count -= 1;\\n    }\\n\\n    function addMoney() payable public {\\n        moneyStored += msg.value;\\n    }\\n\\n    function getCount() public view returns (uint256) {\\n        return count;\\n    }\\n\\n    function getMoneyStored() public view returns (uint256){\\n        return moneyStored;\\n    }\\n}\",\n  \"sourcePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n  \"ast\": {\n    \"absolutePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n    \"exportedSymbols\": {\n      \"Counter\": [\n        49\n      ]\n    },\n    \"id\": 50,\n    \"license\": null,\n    \"nodeType\": \"SourceUnit\",\n    \"nodes\": [\n      {\n        \"id\": 1,\n        \"literals\": [\n          \"solidity\",\n          \">=\",\n          \"0.4\",\n          \".22\",\n          \"<\",\n          \"0.8\",\n          \".0\"\n        ],\n        \"nodeType\": \"PragmaDirective\",\n        \"src\": \"0:32:0\"\n      },\n      {\n        \"abstract\": false,\n        \"baseContracts\": [],\n        \"contractDependencies\": [],\n        \"contractKind\": \"contract\",\n        \"documentation\": null,\n        \"fullyImplemented\": true,\n        \"id\": 49,\n        \"linearizedBaseContracts\": [\n          49\n        ],\n        \"name\": \"Counter\",\n        \"nodeType\": \"ContractDefinition\",\n        \"nodes\": [\n          {\n            \"constant\": false,\n            \"id\": 4,\n            \"mutability\": \"mutable\",\n            \"name\": \"count\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"57:25:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 2,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"57:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 3,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"81:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"private\"\n          },\n          {\n            \"constant\": false,\n            \"id\": 7,\n            \"mutability\": \"mutable\",\n            \"name\": \"moneyStored\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"88:23:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 5,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"88:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 6,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"110:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"internal\"\n          },\n          {\n            \"body\": {\n              \"id\": 14,\n              \"nodeType\": \"Block\",\n              \"src\": \"153:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 12,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 10,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"163:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 11,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"172:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"163:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 13,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"163:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"5b34b966\",\n            \"id\": 15,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"incrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 8,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"143:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 9,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"153:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"118:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 22,\n              \"nodeType\": \"Block\",\n              \"src\": \"220:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 20,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 18,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"230:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"-=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 19,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"239:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"230:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 21,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"230:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"f5c5ad83\",\n            \"id\": 23,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"decrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 16,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"210:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 17,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"220:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"185:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 31,\n              \"nodeType\": \"Block\",\n              \"src\": \"288:41:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 29,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 26,\n                      \"name\": \"moneyStored\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 7,\n                      \"src\": \"298:11:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"expression\": {\n                        \"argumentTypes\": null,\n                        \"id\": 27,\n                        \"name\": \"msg\",\n                        \"nodeType\": \"Identifier\",\n                        \"overloadedDeclarations\": [],\n                        \"referencedDeclaration\": -15,\n                        \"src\": \"313:3:0\",\n                        \"typeDescriptions\": {\n                          \"typeIdentifier\": \"t_magic_message\",\n                          \"typeString\": \"msg\"\n                        }\n                      },\n                      \"id\": 28,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": false,\n                      \"lValueRequested\": false,\n                      \"memberName\": \"value\",\n                      \"nodeType\": \"MemberAccess\",\n                      \"referencedDeclaration\": null,\n                      \"src\": \"313:9:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"src\": \"298:24:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 30,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"298:24:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"1b3f4842\",\n            \"id\": 32,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"addMoney\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 24,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"270:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 25,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"288:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"253:76:0\",\n            \"stateMutability\": \"payable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 39,\n              \"nodeType\": \"Block\",\n              \"src\": \"385:29:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 37,\n                    \"name\": \"count\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 4,\n                    \"src\": \"402:5:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 36,\n                  \"id\": 38,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"395:12:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"a87d942c\",\n            \"id\": 40,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getCount\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 33,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"352:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 36,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 35,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 40,\n                  \"src\": \"376:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 34,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"376:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"375:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"335:79:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 47,\n              \"nodeType\": \"Block\",\n              \"src\": \"475:35:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 45,\n                    \"name\": \"moneyStored\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 7,\n                    \"src\": \"492:11:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 44,\n                  \"id\": 46,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"485:18:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"e0a438fb\",\n            \"id\": 48,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getMoneyStored\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 41,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"443:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 44,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 43,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 48,\n                  \"src\": \"467:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 42,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"467:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"466:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"420:90:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          }\n        ],\n        \"scope\": 50,\n        \"src\": \"34:478:0\"\n      }\n    ],\n    \"src\": \"0:512:0\"\n  },\n  \"legacyAST\": {\n    \"absolutePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n    \"exportedSymbols\": {\n      \"Counter\": [\n        49\n      ]\n    },\n    \"id\": 50,\n    \"license\": null,\n    \"nodeType\": \"SourceUnit\",\n    \"nodes\": [\n      {\n        \"id\": 1,\n        \"literals\": [\n          \"solidity\",\n          \">=\",\n          \"0.4\",\n          \".22\",\n          \"<\",\n          \"0.8\",\n          \".0\"\n        ],\n        \"nodeType\": \"PragmaDirective\",\n        \"src\": \"0:32:0\"\n      },\n      {\n        \"abstract\": false,\n        \"baseContracts\": [],\n        \"contractDependencies\": [],\n        \"contractKind\": \"contract\",\n        \"documentation\": null,\n        \"fullyImplemented\": true,\n        \"id\": 49,\n        \"linearizedBaseContracts\": [\n          49\n        ],\n        \"name\": \"Counter\",\n        \"nodeType\": \"ContractDefinition\",\n        \"nodes\": [\n          {\n            \"constant\": false,\n            \"id\": 4,\n            \"mutability\": \"mutable\",\n            \"name\": \"count\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"57:25:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 2,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"57:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 3,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"81:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"private\"\n          },\n          {\n            \"constant\": false,\n            \"id\": 7,\n            \"mutability\": \"mutable\",\n            \"name\": \"moneyStored\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"88:23:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 5,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"88:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 6,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"110:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"internal\"\n          },\n          {\n            \"body\": {\n              \"id\": 14,\n              \"nodeType\": \"Block\",\n              \"src\": \"153:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 12,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 10,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"163:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 11,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"172:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"163:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 13,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"163:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"5b34b966\",\n            \"id\": 15,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"incrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 8,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"143:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 9,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"153:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"118:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 22,\n              \"nodeType\": \"Block\",\n              \"src\": \"220:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 20,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 18,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"230:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"-=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 19,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"239:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"230:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 21,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"230:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"f5c5ad83\",\n            \"id\": 23,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"decrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 16,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"210:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 17,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"220:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"185:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 31,\n              \"nodeType\": \"Block\",\n              \"src\": \"288:41:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 29,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 26,\n                      \"name\": \"moneyStored\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 7,\n                      \"src\": \"298:11:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"expression\": {\n                        \"argumentTypes\": null,\n                        \"id\": 27,\n                        \"name\": \"msg\",\n                        \"nodeType\": \"Identifier\",\n                        \"overloadedDeclarations\": [],\n                        \"referencedDeclaration\": -15,\n                        \"src\": \"313:3:0\",\n                        \"typeDescriptions\": {\n                          \"typeIdentifier\": \"t_magic_message\",\n                          \"typeString\": \"msg\"\n                        }\n                      },\n                      \"id\": 28,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": false,\n                      \"lValueRequested\": false,\n                      \"memberName\": \"value\",\n                      \"nodeType\": \"MemberAccess\",\n                      \"referencedDeclaration\": null,\n                      \"src\": \"313:9:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"src\": \"298:24:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 30,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"298:24:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"1b3f4842\",\n            \"id\": 32,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"addMoney\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 24,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"270:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 25,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"288:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"253:76:0\",\n            \"stateMutability\": \"payable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 39,\n              \"nodeType\": \"Block\",\n              \"src\": \"385:29:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 37,\n                    \"name\": \"count\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 4,\n                    \"src\": \"402:5:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 36,\n                  \"id\": 38,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"395:12:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"a87d942c\",\n            \"id\": 40,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getCount\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 33,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"352:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 36,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 35,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 40,\n                  \"src\": \"376:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 34,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"376:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"375:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"335:79:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 47,\n              \"nodeType\": \"Block\",\n              \"src\": \"475:35:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 45,\n                    \"name\": \"moneyStored\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 7,\n                    \"src\": \"492:11:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 44,\n                  \"id\": 46,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"485:18:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"e0a438fb\",\n            \"id\": 48,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getMoneyStored\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 41,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"443:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 44,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 43,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 48,\n                  \"src\": \"467:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 42,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"467:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"466:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"420:90:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          }\n        ],\n        \"scope\": 50,\n        \"src\": \"34:478:0\"\n      }\n    ],\n    \"src\": \"0:512:0\"\n  },\n  \"compiler\": {\n    \"name\": \"solc\",\n    \"version\": \"0.7.0+commit.9e61f92b.Emscripten.clang\"\n  },\n  \"networks\": {},\n  \"schemaVersion\": \"3.3.1\",\n  \"updatedAt\": \"2020-11-01T18:26:25.907Z\",\n  \"devdoc\": {\n    \"kind\": \"dev\",\n    \"methods\": {},\n    \"version\": 1\n  },\n  \"userdoc\": {\n    \"kind\": \"user\",\n    \"methods\": {},\n    \"version\": 1\n  }\n}";
+const initializeContract = async wallet => {
+  let contract = "{\n  \"contractName\": \"Counter\",\n  \"abi\": [\n    {\n      \"inputs\": [],\n      \"name\": \"incrementCounter\",\n      \"outputs\": [],\n      \"stateMutability\": \"nonpayable\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"decrementCounter\",\n      \"outputs\": [],\n      \"stateMutability\": \"nonpayable\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"addMoney\",\n      \"outputs\": [],\n      \"stateMutability\": \"payable\",\n      \"type\": \"function\",\n      \"payable\": true\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"getCount\",\n      \"outputs\": [\n        {\n          \"internalType\": \"uint256\",\n          \"name\": \"\",\n          \"type\": \"uint256\"\n        }\n      ],\n      \"stateMutability\": \"view\",\n      \"type\": \"function\",\n      \"constant\": true\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"getMoneyStored\",\n      \"outputs\": [\n        {\n          \"internalType\": \"uint256\",\n          \"name\": \"\",\n          \"type\": \"uint256\"\n        }\n      ],\n      \"stateMutability\": \"view\",\n      \"type\": \"function\",\n      \"constant\": true\n    }\n  ],\n  \"metadata\": \"{\\\"compiler\\\":{\\\"version\\\":\\\"0.7.0+commit.9e61f92b\\\"},\\\"language\\\":\\\"Solidity\\\",\\\"output\\\":{\\\"abi\\\":[{\\\"inputs\\\":[],\\\"name\\\":\\\"addMoney\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"payable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"decrementCounter\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getCount\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getMoneyStored\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"incrementCounter\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}],\\\"devdoc\\\":{\\\"kind\\\":\\\"dev\\\",\\\"methods\\\":{},\\\"version\\\":1},\\\"userdoc\\\":{\\\"kind\\\":\\\"user\\\",\\\"methods\\\":{},\\\"version\\\":1}},\\\"settings\\\":{\\\"compilationTarget\\\":{\\\"/home/rachit/Projects/demo/contracts/Counter.sol\\\":\\\"Counter\\\"},\\\"evmVersion\\\":\\\"istanbul\\\",\\\"libraries\\\":{},\\\"metadata\\\":{\\\"bytecodeHash\\\":\\\"ipfs\\\"},\\\"optimizer\\\":{\\\"enabled\\\":false,\\\"runs\\\":200},\\\"remappings\\\":[]},\\\"sources\\\":{\\\"/home/rachit/Projects/demo/contracts/Counter.sol\\\":{\\\"keccak256\\\":\\\"0x1e702f3f7d04fb3a62c3585e9f3a950b95db333308296d454afea31d90404f72\\\",\\\"urls\\\":[\\\"bzz-raw://ae2d4040ed723611feb8760df94f02f540576c1ab9178a0dc575448f4b5b0d3b\\\",\\\"dweb:/ipfs/QmWsM9Vzb6gjA8orRZuJJEaHRq3Km71mYFxhXbaVxE37km\\\"]}},\\\"version\\\":1}\",\n  \"bytecode\": \"0x608060405260008055600060015534801561001957600080fd5b5061015c806100296000396000f3fe60806040526004361061004a5760003560e01c80631b3f48421461004f5780635b34b96614610059578063a87d942c14610070578063e0a438fb1461009b578063f5c5ad83146100c6575b600080fd5b6100576100dd565b005b34801561006557600080fd5b5061006e6100ef565b005b34801561007c57600080fd5b50610085610101565b6040518082815260200191505060405180910390f35b3480156100a757600080fd5b506100b061010a565b6040518082815260200191505060405180910390f35b3480156100d257600080fd5b506100db610114565b005b34600160008282540192505081905550565b60016000808282540192505081905550565b60008054905090565b6000600154905090565b6001600080828254039250508190555056fea2646970667358221220b2c20047e73edf3b3020c78c599df5ecb6d4d6cd4e15836c6a117bffa0b85b3064736f6c63430007000033\",\n  \"deployedBytecode\": \"0x60806040526004361061004a5760003560e01c80631b3f48421461004f5780635b34b96614610059578063a87d942c14610070578063e0a438fb1461009b578063f5c5ad83146100c6575b600080fd5b6100576100dd565b005b34801561006557600080fd5b5061006e6100ef565b005b34801561007c57600080fd5b50610085610101565b6040518082815260200191505060405180910390f35b3480156100a757600080fd5b506100b061010a565b6040518082815260200191505060405180910390f35b3480156100d257600080fd5b506100db610114565b005b34600160008282540192505081905550565b60016000808282540192505081905550565b60008054905090565b6000600154905090565b6001600080828254039250508190555056fea2646970667358221220b2c20047e73edf3b3020c78c599df5ecb6d4d6cd4e15836c6a117bffa0b85b3064736f6c63430007000033\",\n  \"immutableReferences\": {},\n  \"sourceMap\": \"34:478:0:-:0;;;81:1;57:25;;110:1;88:23;;34:478;;;;;;;;;;;;;;;;\",\n  \"deployedSourceMap\": \"34:478:0:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;253:76;;;:::i;:::-;;118:62;;;;;;;;;;;;;:::i;:::-;;335:79;;;;;;;;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;420:90;;;;;;;;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;185:62;;;;;;;;;;;;;:::i;:::-;;253:76;313:9;298:11;;:24;;;;;;;;;;;253:76::o;118:62::-;172:1;163:5;;:10;;;;;;;;;;;118:62::o;335:79::-;376:7;402:5;;395:12;;335:79;:::o;420:90::-;467:7;492:11;;485:18;;420:90;:::o;185:62::-;239:1;230:5;;:10;;;;;;;;;;;185:62::o\",\n  \"source\": \"pragma solidity >=0.4.22 <0.8.0;\\n\\ncontract Counter {\\n    uint256 private count = 0;\\n    uint256 moneyStored = 0;\\n\\n    function incrementCounter() public {\\n        count += 1;\\n    }\\n    function decrementCounter() public {\\n        count -= 1;\\n    }\\n\\n    function addMoney() payable public {\\n        moneyStored += msg.value;\\n    }\\n\\n    function getCount() public view returns (uint256) {\\n        return count;\\n    }\\n\\n    function getMoneyStored() public view returns (uint256){\\n        return moneyStored;\\n    }\\n}\",\n  \"sourcePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n  \"ast\": {\n    \"absolutePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n    \"exportedSymbols\": {\n      \"Counter\": [\n        49\n      ]\n    },\n    \"id\": 50,\n    \"license\": null,\n    \"nodeType\": \"SourceUnit\",\n    \"nodes\": [\n      {\n        \"id\": 1,\n        \"literals\": [\n          \"solidity\",\n          \">=\",\n          \"0.4\",\n          \".22\",\n          \"<\",\n          \"0.8\",\n          \".0\"\n        ],\n        \"nodeType\": \"PragmaDirective\",\n        \"src\": \"0:32:0\"\n      },\n      {\n        \"abstract\": false,\n        \"baseContracts\": [],\n        \"contractDependencies\": [],\n        \"contractKind\": \"contract\",\n        \"documentation\": null,\n        \"fullyImplemented\": true,\n        \"id\": 49,\n        \"linearizedBaseContracts\": [\n          49\n        ],\n        \"name\": \"Counter\",\n        \"nodeType\": \"ContractDefinition\",\n        \"nodes\": [\n          {\n            \"constant\": false,\n            \"id\": 4,\n            \"mutability\": \"mutable\",\n            \"name\": \"count\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"57:25:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 2,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"57:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 3,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"81:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"private\"\n          },\n          {\n            \"constant\": false,\n            \"id\": 7,\n            \"mutability\": \"mutable\",\n            \"name\": \"moneyStored\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"88:23:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 5,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"88:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 6,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"110:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"internal\"\n          },\n          {\n            \"body\": {\n              \"id\": 14,\n              \"nodeType\": \"Block\",\n              \"src\": \"153:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 12,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 10,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"163:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 11,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"172:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"163:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 13,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"163:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"5b34b966\",\n            \"id\": 15,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"incrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 8,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"143:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 9,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"153:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"118:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 22,\n              \"nodeType\": \"Block\",\n              \"src\": \"220:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 20,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 18,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"230:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"-=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 19,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"239:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"230:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 21,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"230:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"f5c5ad83\",\n            \"id\": 23,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"decrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 16,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"210:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 17,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"220:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"185:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 31,\n              \"nodeType\": \"Block\",\n              \"src\": \"288:41:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 29,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 26,\n                      \"name\": \"moneyStored\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 7,\n                      \"src\": \"298:11:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"expression\": {\n                        \"argumentTypes\": null,\n                        \"id\": 27,\n                        \"name\": \"msg\",\n                        \"nodeType\": \"Identifier\",\n                        \"overloadedDeclarations\": [],\n                        \"referencedDeclaration\": -15,\n                        \"src\": \"313:3:0\",\n                        \"typeDescriptions\": {\n                          \"typeIdentifier\": \"t_magic_message\",\n                          \"typeString\": \"msg\"\n                        }\n                      },\n                      \"id\": 28,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": false,\n                      \"lValueRequested\": false,\n                      \"memberName\": \"value\",\n                      \"nodeType\": \"MemberAccess\",\n                      \"referencedDeclaration\": null,\n                      \"src\": \"313:9:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"src\": \"298:24:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 30,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"298:24:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"1b3f4842\",\n            \"id\": 32,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"addMoney\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 24,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"270:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 25,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"288:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"253:76:0\",\n            \"stateMutability\": \"payable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 39,\n              \"nodeType\": \"Block\",\n              \"src\": \"385:29:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 37,\n                    \"name\": \"count\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 4,\n                    \"src\": \"402:5:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 36,\n                  \"id\": 38,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"395:12:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"a87d942c\",\n            \"id\": 40,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getCount\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 33,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"352:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 36,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 35,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 40,\n                  \"src\": \"376:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 34,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"376:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"375:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"335:79:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 47,\n              \"nodeType\": \"Block\",\n              \"src\": \"475:35:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 45,\n                    \"name\": \"moneyStored\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 7,\n                    \"src\": \"492:11:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 44,\n                  \"id\": 46,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"485:18:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"e0a438fb\",\n            \"id\": 48,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getMoneyStored\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 41,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"443:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 44,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 43,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 48,\n                  \"src\": \"467:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 42,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"467:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"466:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"420:90:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          }\n        ],\n        \"scope\": 50,\n        \"src\": \"34:478:0\"\n      }\n    ],\n    \"src\": \"0:512:0\"\n  },\n  \"legacyAST\": {\n    \"absolutePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n    \"exportedSymbols\": {\n      \"Counter\": [\n        49\n      ]\n    },\n    \"id\": 50,\n    \"license\": null,\n    \"nodeType\": \"SourceUnit\",\n    \"nodes\": [\n      {\n        \"id\": 1,\n        \"literals\": [\n          \"solidity\",\n          \">=\",\n          \"0.4\",\n          \".22\",\n          \"<\",\n          \"0.8\",\n          \".0\"\n        ],\n        \"nodeType\": \"PragmaDirective\",\n        \"src\": \"0:32:0\"\n      },\n      {\n        \"abstract\": false,\n        \"baseContracts\": [],\n        \"contractDependencies\": [],\n        \"contractKind\": \"contract\",\n        \"documentation\": null,\n        \"fullyImplemented\": true,\n        \"id\": 49,\n        \"linearizedBaseContracts\": [\n          49\n        ],\n        \"name\": \"Counter\",\n        \"nodeType\": \"ContractDefinition\",\n        \"nodes\": [\n          {\n            \"constant\": false,\n            \"id\": 4,\n            \"mutability\": \"mutable\",\n            \"name\": \"count\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"57:25:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 2,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"57:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 3,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"81:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"private\"\n          },\n          {\n            \"constant\": false,\n            \"id\": 7,\n            \"mutability\": \"mutable\",\n            \"name\": \"moneyStored\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"88:23:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 5,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"88:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 6,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"110:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"internal\"\n          },\n          {\n            \"body\": {\n              \"id\": 14,\n              \"nodeType\": \"Block\",\n              \"src\": \"153:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 12,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 10,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"163:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 11,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"172:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"163:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 13,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"163:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"5b34b966\",\n            \"id\": 15,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"incrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 8,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"143:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 9,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"153:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"118:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 22,\n              \"nodeType\": \"Block\",\n              \"src\": \"220:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 20,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 18,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"230:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"-=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 19,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"239:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"230:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 21,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"230:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"f5c5ad83\",\n            \"id\": 23,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"decrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 16,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"210:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 17,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"220:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"185:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 31,\n              \"nodeType\": \"Block\",\n              \"src\": \"288:41:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 29,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 26,\n                      \"name\": \"moneyStored\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 7,\n                      \"src\": \"298:11:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"expression\": {\n                        \"argumentTypes\": null,\n                        \"id\": 27,\n                        \"name\": \"msg\",\n                        \"nodeType\": \"Identifier\",\n                        \"overloadedDeclarations\": [],\n                        \"referencedDeclaration\": -15,\n                        \"src\": \"313:3:0\",\n                        \"typeDescriptions\": {\n                          \"typeIdentifier\": \"t_magic_message\",\n                          \"typeString\": \"msg\"\n                        }\n                      },\n                      \"id\": 28,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": false,\n                      \"lValueRequested\": false,\n                      \"memberName\": \"value\",\n                      \"nodeType\": \"MemberAccess\",\n                      \"referencedDeclaration\": null,\n                      \"src\": \"313:9:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"src\": \"298:24:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 30,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"298:24:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"1b3f4842\",\n            \"id\": 32,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"addMoney\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 24,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"270:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 25,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"288:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"253:76:0\",\n            \"stateMutability\": \"payable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 39,\n              \"nodeType\": \"Block\",\n              \"src\": \"385:29:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 37,\n                    \"name\": \"count\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 4,\n                    \"src\": \"402:5:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 36,\n                  \"id\": 38,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"395:12:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"a87d942c\",\n            \"id\": 40,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getCount\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 33,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"352:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 36,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 35,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 40,\n                  \"src\": \"376:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 34,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"376:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"375:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"335:79:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 47,\n              \"nodeType\": \"Block\",\n              \"src\": \"475:35:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 45,\n                    \"name\": \"moneyStored\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 7,\n                    \"src\": \"492:11:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 44,\n                  \"id\": 46,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"485:18:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"e0a438fb\",\n            \"id\": 48,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getMoneyStored\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 41,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"443:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 44,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 43,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 48,\n                  \"src\": \"467:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 42,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"467:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"466:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"420:90:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          }\n        ],\n        \"scope\": 50,\n        \"src\": \"34:478:0\"\n      }\n    ],\n    \"src\": \"0:512:0\"\n  },\n  \"compiler\": {\n    \"name\": \"solc\",\n    \"version\": \"0.7.0+commit.9e61f92b.Emscripten.clang\"\n  },\n  \"networks\": {\n    \"2\": {\n      \"events\": {},\n      \"links\": {},\n      \"address\": \"0x9e6B79B0c4724DE42147B927e734d80a76c36BF9\",\n      \"transactionHash\": \"0x57ccda05dc9e4266d9bc41dfe941d23704bc8ef43bd38db8bbc5aea9f8020f42\"\n    }\n  },\n  \"schemaVersion\": \"3.2.1\",\n  \"updatedAt\": \"2020-11-13T15:32:39.949Z\",\n  \"networkType\": \"ethereum\",\n  \"devdoc\": {\n    \"kind\": \"dev\",\n    \"methods\": {},\n    \"version\": 1\n  },\n  \"userdoc\": {\n    \"kind\": \"user\",\n    \"methods\": {},\n    \"version\": 1\n  }\n}";
+  contract = JSON.parse(contract);
   const abi = contract.abi;
-  return abi;
+  const contractAddress = contract.networks['2'].address;
+
+  const contractInstance = _hmy.default.contracts.createContract(abi, contractAddress);
+
+  return contractInstance;
 };
 
 var _default = initializeContract;
 exports.default = _default;
-},{"@harmony-js/contract":"../node_modules/@harmony-js/contract/dist/index.js","fs":"../node_modules/parcel-bundler/src/builtins/_empty.js"}],"userWallet.js":[function(require,module,exports) {
+},{"./hmy":"hmy.js","fs":"../node_modules/parcel-bundler/src/builtins/_empty.js"}],"userWallet.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -80304,8 +80256,34 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 
+var _hmy = _interopRequireDefault(require("./hmy"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
 class userStore {
   constructor(stores) {
+    _defineProperty(this, "connectToOneWallet", async (wallet) => {
+      let {
+        address
+      } = await window.onewallet.getAccount();
+
+      let userAddress = _hmy.default.crypto.getAddress(address).checksum;
+
+      wallet.defaultSigner = userAddress;
+
+      wallet.signTransaction = async tx => {
+        try {
+          tx.from = userAddress;
+          const signTx = await window.onewallet.signTransaction(tx);
+          return signTx;
+        } catch (e) {
+          throw "Something went wrong";
+        }
+      };
+    });
+
     this.isOneWallet = window.onewallet && window.onewallet.isOneWallet;
     this.onewallet = window.onewallet;
   }
@@ -80314,6 +80292,7 @@ class userStore {
     const getAccount = await this.onewallet.getAccount();
     this.address = getAccount.address;
     this.isAuthorized = true;
+    await this.connectToOneWallet(this.onewallet);
     return Promise.resolve;
   }
 
@@ -80321,12 +80300,12 @@ class userStore {
 
 var _default = userStore;
 exports.default = _default;
-},{}],"init.js":[function(require,module,exports) {
+},{"./hmy":"hmy.js"}],"init.js":[function(require,module,exports) {
 "use strict";
 
-var _walletSetup = require("./walletSetup");
+var _contract = require("@harmony-js/contract");
 
-var _contract = _interopRequireDefault(require("./contract"));
+var _contract2 = _interopRequireDefault(require("./contract"));
 
 var _userWallet = _interopRequireDefault(require("./userWallet"));
 
@@ -80336,13 +80315,14 @@ let but = document.getElementById("inputtButton");
 but.addEventListener("click", initWallet);
 
 async function initWallet() {
-  (0, _contract.default)();
   const wallet = new _userWallet.default();
   await wallet.signin();
-  const connectToWallet = await (0, _walletSetup.connectToOneWallet)(wallet);
-  return connectToWallet;
+  const contract = await (0, _contract2.default)();
+  console.log(contract);
+  const result = await contract.methods.getCount().call();
+  console.log(result.toString());
 }
-},{"./walletSetup":"walletSetup.js","./contract":"contract.js","./userWallet":"userWallet.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
+},{"@harmony-js/contract":"../node_modules/@harmony-js/contract/dist/index.js","./contract":"contract.js","./userWallet":"userWallet.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
 var global = arguments[3];
 var OVERLAY_ID = '__parcel__error__overlay__';
 var OldModule = module.bundle.Module;
@@ -80370,7 +80350,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "37637" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "41285" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};

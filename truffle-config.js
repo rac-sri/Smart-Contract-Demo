@@ -50,7 +50,7 @@ module.exports = {
         return truffleProvider;
       },
     },
-    mainnet0: {
+    mainnet: {
       network_id: "1", // Any network (default: none)
       provider: () => {
         const truffleProvider = new TruffleProvider(

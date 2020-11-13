@@ -1,0 +1,28 @@
+{
+  "name": "demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "@harmony-js/core": "^0.1.55",
+    "dotenv": "^8.2.0",
+    "tslib": "^2.0.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rachit2501/Smart-Contract-Demo.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rachit2501/Smart-Contract-Demo/issues"
+  },
+  "homepage": "https://github.com/rachit2501/Smart-Contract-Demo#readme"
+}
