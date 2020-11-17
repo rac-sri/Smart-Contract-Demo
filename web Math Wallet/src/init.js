@@ -46,3 +46,16 @@ async function initWallet(){
     
     const increment = await contract.methods.addMoney().send(options)
 }
+
+
+
+const show  = document.getElementById("showtoken");
+show.addEventListener('click', showValue)
+
+async function showValue(){
+  const value = await contract.methods.getMoneyStored().call();
+  console.log(value.toString())
+  const para = document.createElement("p")
+  para.innerHTML = value.toString();
+  show.after(para)
+}

@@ -3,7 +3,7 @@ import fs from 'fs';
 const { Harmony } = require('@harmony-js/core');
 const { BN } = require('@harmony-js/crypto');
 const { ChainType } = require('@harmony-js/utils');
-const {	toWei} = require('@harmony-js/utils');
+const {	toWei, } = require('@harmony-js/utils');
 
 const hmy =  new Harmony(
   // let's assume we deploy smart contract to this end-point URL
@@ -24,7 +24,7 @@ const initializeContract = async (wallet)=>{
     const contractInstance = hmy.contracts.createContract(abi,contractAddress);
     return contractInstance    
 }
-
+let contract;
 let but = document.getElementById("inputtButton");
 
 but.addEventListener("click",initWallet);
@@ -33,7 +33,7 @@ async function initWallet(){
     const wallet = new userWallet();
     await wallet.signin();
     const unattachedContract = await initializeContract();
-    const contract = wallet.attachToContract(unattachedContract);
+    contract = wallet.attachToContract(unattachedContract);
     const result = await contract.methods.getCount().call()
     console.log(result.toString())
 
@@ -45,5 +45,17 @@ async function initWallet(){
     };
     
     const increment = await contract.methods.addMoney().send(options)
-    console.log(increment)
+}
+
+
+
+const show  = document.getElementById("showtoken");
+show.addEventListener('click', showValue)
+
+async function showValue(){
+  const value = await contract.methods.getMoneyStored().call();
+  console.log(value.toString())
+  const para = document.createElement("p")
+  para.innerHTML = value.toString();
+  show.after(para)
 }

@@ -80293,6 +80293,7 @@ const initializeContract = async wallet => {
   return contractInstance;
 };
 
+let contract;
 let but = document.getElementById("inputtButton");
 but.addEventListener("click", initWallet);
 
@@ -80300,7 +80301,7 @@ async function initWallet() {
   const wallet = new _userWallet.default();
   await wallet.signin();
   const unattachedContract = await initializeContract();
-  const contract = wallet.attachToContract(unattachedContract);
+  contract = wallet.attachToContract(unattachedContract);
   const result = await contract.methods.getCount().call();
   console.log(result.toString());
   const one = new BN('1');
@@ -80310,7 +80311,17 @@ async function initWallet() {
     value: toWei(one, hmy.utils.Units.one)
   };
   const increment = await contract.methods.addMoney().send(options);
-  console.log(increment);
+}
+
+const show = document.getElementById("showtoken");
+show.addEventListener('click', showValue);
+
+async function showValue() {
+  const value = await contract.methods.getMoneyStored().call();
+  console.log(value.toString());
+  const para = document.createElement("p");
+  para.innerHTML = value.toString();
+  show.after(para);
 }
 },{"./userWallet":"userWallet.js","fs":"../node_modules/parcel-bundler/src/builtins/_empty.js","@harmony-js/core":"../node_modules/@harmony-js/core/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
 var global = arguments[3];
@@ -80340,7 +80351,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "42853" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "35827" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
