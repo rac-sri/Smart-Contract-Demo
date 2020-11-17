@@ -127,40 +127,39 @@ exports.default = void 0;
 
 var _init = require("./init");
 
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
 class userStore {
   constructor(stores) {
-    _defineProperty(this, "connectToOneWallet", async (wallet) => {
-      let {
-        address
-      } = await window.onewallet.getAccount();
-
-      let userAddress = _init.hmy.crypto.getAddress(address).checksum;
-
-      wallet.defaultSigner = userAddress;
-
-      wallet.signTransaction = async tx => {
-        try {
-          tx.from = userAddress;
-          const signTx = await window.onewallet.signTransaction(tx);
-          return signTx;
-        } catch (e) {
-          throw "Something went wrong";
-        }
-      };
-    });
-
     this.isOneWallet = window.onewallet && window.onewallet.isOneWallet;
     this.onewallet = window.onewallet;
   }
 
   async signin() {
     const getAccount = await this.onewallet.getAccount();
+    console.log("slkdfjds");
+    console.log(getAccount);
     this.address = getAccount.address;
     this.isAuthorized = true;
-    await this.connectToOneWallet(this.onewallet);
-    return Promise.resolve;
+  }
+
+  signTransaction(txn) {
+    console.log("asjdnasljkndlask");
+
+    if (this.isOneWallet) {
+      return this.onewallet.signTransaction(txn);
+    }
+  }
+
+  attachToContract(contract) {
+    if (this.onewallet) {
+      contract.wallet.signTransaction = async tx => {
+        tx.from = this.address;
+        const signTx = await this.signTransaction(tx);
+        console.log(signTx);
+        return signTx;
+      };
+    }
+
+    return contract;
   }
 
 }
@@ -80281,7 +80280,7 @@ const {
 const hmy = new Harmony( // let's assume we deploy smart contract to this end-point URL
 'https://api.s0.b.hmny.io', {
   chainType: ChainType.Harmony,
-  chainId: Number(undefined)
+  chainId: 2
 });
 exports.hmy = hmy;
 
@@ -80300,15 +80299,15 @@ but.addEventListener("click", initWallet);
 async function initWallet() {
   const wallet = new _userWallet.default();
   await wallet.signin();
-  const contract = await initializeContract();
-  console.log(contract);
+  const unattachedContract = await initializeContract();
+  const contract = wallet.attachToContract(unattachedContract);
   const result = await contract.methods.getCount().call();
   console.log(result.toString());
   const one = new BN('1');
   let options = {
     gasPrice: 1000000000,
-    gasLimit: 21000,
-    value: toWei(toWei(one, hmy.utils.Units.one))
+    gasLimit: 210000,
+    value: toWei(one, hmy.utils.Units.one)
   };
   const increment = await contract.methods.addMoney().send(options);
   console.log(increment);
@@ -80341,7 +80340,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "44233" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "42853" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};

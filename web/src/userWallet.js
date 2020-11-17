@@ -9,32 +9,31 @@ class userStore {
 
     async signin(){
         const getAccount = await this.onewallet.getAccount();
+        console.log("slkdfjds")
+        console.log(getAccount)
+
         this.address = getAccount.address;
         this.isAuthorized = true;
-        await this.connectToOneWallet(this.onewallet)
-        return Promise.resolve();
     }
 
-    connectToOneWallet = async (
-        wallet
-      ) => {
-        let { address } = await window.onewallet.getAccount();
-        let userAddress = hmy.crypto.getAddress(address).checksum;
-      
-        wallet.defaultSigner = userAddress;
-      
-        wallet.signTransaction = async tx => {
-          try {
-            tx.from = userAddress;
-      
-            const signTx = await window.onewallet.signTransaction(tx);
-      
+      signTransaction(txn) {
+        console.log("asjdnasljkndlask")
+        if (this.isOneWallet) {
+          return this.onewallet.signTransaction(txn);
+        }
+      }
+
+      attachToContract(contract) {
+        if(this.onewallet){
+          contract.wallet.signTransaction = async (tx)=>{
+            tx.from = this.address;
+            const signTx = await this.signTransaction(tx);
+            console.log(signTx);
             return signTx;
-          } catch (e) {
-            throw "Something went wrong"
           }
-        };
-      };
+        }
+        return contract
+      }
 }
 
 export default userStore

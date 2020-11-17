@@ -10,7 +10,7 @@ const hmy =  new Harmony(
   'https://api.s0.b.hmny.io',
   {
     chainType: ChainType.Harmony,
-    chainId: Number(process.env.HMY_CHAIN_ID),
+    chainId: 2,
   },
 );
 
@@ -32,16 +32,16 @@ but.addEventListener("click",initWallet);
 async function initWallet(){
     const wallet = new userWallet();
     await wallet.signin();
-    const contract = await initializeContract();
-    console.log(contract)
+    const unattachedContract = await initializeContract();
+    const contract = wallet.attachToContract(unattachedContract);
     const result = await contract.methods.getCount().call()
     console.log(result.toString())
 
     const one = new BN('1')
     let options = {
 		gasPrice: 1000000000,
-		gasLimit: 21000,
-		value: toWei(toWei(one, hmy.utils.Units.one)),
+		gasLimit: 210000,
+		value: toWei(one, hmy.utils.Units.one),
     };
     
     const increment = await contract.methods.addMoney().send(options)
