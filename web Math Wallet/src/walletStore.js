@@ -6,10 +6,6 @@ export class MathWallet {
 	constructor(network, client) {
 		console.log(network, client);
 		this.isMathWallet = false;
-
-		setTimeout(async () => {
-			this.initWallet();
-		}, 2000);
 	}
 
 	 signIn() {
@@ -17,7 +13,7 @@ export class MathWallet {
 			this.initWallet();
 		}
 
-		return this.mathwallet.getAccount().then((account) => {
+		this.mathwallet.getAccount().then((account) => {
 			this.sessionType = `mathwallet`;
 
 			this.address = account.address;

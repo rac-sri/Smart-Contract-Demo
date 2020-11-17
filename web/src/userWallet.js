@@ -1,4 +1,4 @@
-import  hmy  from './hmy';
+import  {hmy}  from './init';
 
 class userStore {
      
@@ -12,7 +12,7 @@ class userStore {
         this.address = getAccount.address;
         this.isAuthorized = true;
         await this.connectToOneWallet(this.onewallet)
-        return Promise.resolve;
+        return Promise.resolve();
     }
 
     connectToOneWallet = async (

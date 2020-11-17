@@ -117,7 +117,9 @@ parcelRequire = (function (modules, cache, entry, globalName) {
   }
 
   return newRequire;
-})({"../../node_modules/tslib/tslib.es6.js":[function(require,module,exports) {
+})({"../node_modules/parcel-bundler/src/builtins/_empty.js":[function(require,module,exports) {
+
+},{}],"../../node_modules/tslib/tslib.es6.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -4663,9 +4665,7 @@ function once(emitter, name) {
 }
 },{}],"../node_modules/readable-stream/lib/internal/streams/stream-browser.js":[function(require,module,exports) {
 module.exports = require('events').EventEmitter;
-},{"events":"../node_modules/events/events.js"}],"../node_modules/parcel-bundler/src/builtins/_empty.js":[function(require,module,exports) {
-
-},{}],"../node_modules/readable-stream/lib/internal/streams/buffer_list.js":[function(require,module,exports) {
+},{"events":"../node_modules/events/events.js"}],"../node_modules/readable-stream/lib/internal/streams/buffer_list.js":[function(require,module,exports) {
 
 'use strict';
 
@@ -65890,7 +65890,117 @@ tslib_1.__exportStar(require("./bech32"), exports);
 tslib_1.__exportStar(require("./types"), exports);
 tslib_1.__exportStar(require("./address"), exports);
 
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","hdkey":"../node_modules/hdkey/lib/hdkey.js","bip39":"../node_modules/bip39/index.js","bn.js":"../node_modules/bn.js/lib/bn.js","./random":"../node_modules/@harmony-js/crypto/dist/random.js","./keyTool":"../node_modules/@harmony-js/crypto/dist/keyTool.js","./keystore":"../node_modules/@harmony-js/crypto/dist/keystore.js","./bytes":"../node_modules/@harmony-js/crypto/dist/bytes.js","./rlp":"../node_modules/@harmony-js/crypto/dist/rlp.js","./keccak256":"../node_modules/@harmony-js/crypto/dist/keccak256.js","./errors":"../node_modules/@harmony-js/crypto/dist/errors.js","./bech32":"../node_modules/@harmony-js/crypto/dist/bech32.js","./types":"../node_modules/@harmony-js/crypto/dist/types.js","./address":"../node_modules/@harmony-js/crypto/dist/address.js"}],"../node_modules/mitt/dist/mitt.es.js":[function(require,module,exports) {
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","hdkey":"../node_modules/hdkey/lib/hdkey.js","bip39":"../node_modules/bip39/index.js","bn.js":"../node_modules/bn.js/lib/bn.js","./random":"../node_modules/@harmony-js/crypto/dist/random.js","./keyTool":"../node_modules/@harmony-js/crypto/dist/keyTool.js","./keystore":"../node_modules/@harmony-js/crypto/dist/keystore.js","./bytes":"../node_modules/@harmony-js/crypto/dist/bytes.js","./rlp":"../node_modules/@harmony-js/crypto/dist/rlp.js","./keccak256":"../node_modules/@harmony-js/crypto/dist/keccak256.js","./errors":"../node_modules/@harmony-js/crypto/dist/errors.js","./bech32":"../node_modules/@harmony-js/crypto/dist/bech32.js","./types":"../node_modules/@harmony-js/crypto/dist/types.js","./address":"../node_modules/@harmony-js/crypto/dist/address.js"}],"walletStore.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.MathWallet = void 0;
+
+const {
+  fromBech32
+} = require('@harmony-js/crypto');
+
+const defaults = {};
+
+class MathWallet {
+  constructor(network, client) {
+    console.log(network, client);
+    this.isMathWallet = false;
+  }
+
+  signIn() {
+    if (!this.mathwallet) {
+      this.initWallet();
+    }
+
+    this.mathwallet.getAccount().then(account => {
+      this.sessionType = `mathwallet`;
+      this.address = account.address;
+      this.isAuthorized = true;
+      console.log(account.address, this.address);
+      this.setBase16Address();
+      return Promise.resolve();
+    });
+  }
+
+  signOut() {
+    if (this.sessionType === 'mathwallet' && this.isMathWallet) {
+      return this.mathwallet.forgetIdentity().then(() => {
+        this.sessionType = '';
+        this.address = null;
+        this.base16Address = null;
+        this.isAuthorized = false;
+        return Promise.resolve();
+      }).catch(err => {
+        console.error(err.message);
+      });
+    }
+  }
+
+  initWallet() {
+    this.isMathWallet = window.harmony && window.harmony.isMathWallet;
+    this.mathwallet = window.harmony;
+    this.signIn();
+  }
+
+  setBase16Address() {
+    this.base16Address = fromBech32(this.address);
+    console.log(this.base16Address);
+  }
+
+  async signTransaction(txn) {
+    console.log(this.isMathWallet);
+
+    if (this.sessionType === 'mathwallet' && this.isMathWallet) {
+      console.log(this.mathwallet);
+      return this.mathwallet.signTransaction(txn);
+    }
+  }
+
+  attachToContract(contract) {
+    contract.wallet.createAccount();
+
+    if (contract.wallet.defaultSigner === '') {
+      contract.wallet.defaultSigner = this.address;
+    }
+
+    contract.wallet.signTransaction = async tx => {
+      try {
+        tx.from = this.address;
+        const signTx = await this.signTransaction(tx);
+        console.log(signTx);
+        return signTx;
+      } catch (err) {
+        if (err.type === 'locked') {
+          alert('Your MathWallet is locked! Please unlock it and try again!');
+          return Promise.reject();
+        } else if (err.type === 'networkError') {
+          await this.signIn();
+          this.initWallet();
+
+          try {
+            tx.from = this.address;
+            const signTx = await this.signTransaction(tx);
+            return signTx;
+          } catch (error) {
+            return Promise.reject(error);
+          }
+        } else {
+          alert('An error occurred - please check that you have MathWallet installed and that it is properly configured!');
+          return Promise.reject();
+        }
+      }
+    };
+
+    return contract;
+  }
+
+}
+
+exports.MathWallet = MathWallet;
+},{"@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js"}],"../node_modules/mitt/dist/mitt.es.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -80198,193 +80308,67 @@ tslib_1.__exportStar(require("./truffleProvider"), exports);
 tslib_1.__exportStar(require("./harmonyExtension"), exports);
 tslib_1.__exportStar(require("./types"), exports);
 
-},{"tslib":"../../node_modules/tslib/tslib.es6.js","./harmony":"../node_modules/@harmony-js/core/dist/harmony.js","./blockchain":"../node_modules/@harmony-js/core/dist/blockchain.js","./truffleProvider":"../node_modules/@harmony-js/core/dist/truffleProvider.js","./harmonyExtension":"../node_modules/@harmony-js/core/dist/harmonyExtension.js","./types":"../node_modules/@harmony-js/core/dist/types.js"}],"hmy.js":[function(require,module,exports) {
+},{"tslib":"../../node_modules/tslib/tslib.es6.js","./harmony":"../node_modules/@harmony-js/core/dist/harmony.js","./blockchain":"../node_modules/@harmony-js/core/dist/blockchain.js","./truffleProvider":"../node_modules/@harmony-js/core/dist/truffleProvider.js","./harmonyExtension":"../node_modules/@harmony-js/core/dist/harmonyExtension.js","./types":"../node_modules/@harmony-js/core/dist/types.js"}],"init.js":[function(require,module,exports) {
 "use strict";
 
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = void 0;
+var _fs = _interopRequireDefault(require("fs"));
+
+var _walletStore = require("./walletStore");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 const {
   Harmony
 } = require('@harmony-js/core');
 
 const {
-  ChainType
+  ChainType,
+  ChainID
 } = require('@harmony-js/utils');
 
-var _default = new Harmony( // let's assume we deploy smart contract to this end-point URL
+const {
+  BN
+} = require('@harmony-js/crypto');
+
+const {
+  toWei
+} = require('@harmony-js/utils');
+
+const hmy = new Harmony( // let's assume we deploy smart contract to this end-point URL
 'https://api.s0.b.hmny.io', {
   chainType: ChainType.Harmony,
-  chainId: Number(undefined)
+  chainId: 2
 });
-
-exports.default = _default;
-},{"@harmony-js/core":"../node_modules/@harmony-js/core/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js"}],"contract.js":[function(require,module,exports) {
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = void 0;
-
-var _hmy = _interopRequireDefault(require("./hmy"));
-
-var _fs = _interopRequireDefault(require("fs"));
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 const initializeContract = async () => {
   let contract = "{\n  \"contractName\": \"Counter\",\n  \"abi\": [\n    {\n      \"inputs\": [],\n      \"name\": \"incrementCounter\",\n      \"outputs\": [],\n      \"stateMutability\": \"nonpayable\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"decrementCounter\",\n      \"outputs\": [],\n      \"stateMutability\": \"nonpayable\",\n      \"type\": \"function\"\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"addMoney\",\n      \"outputs\": [],\n      \"stateMutability\": \"payable\",\n      \"type\": \"function\",\n      \"payable\": true\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"getCount\",\n      \"outputs\": [\n        {\n          \"internalType\": \"uint256\",\n          \"name\": \"\",\n          \"type\": \"uint256\"\n        }\n      ],\n      \"stateMutability\": \"view\",\n      \"type\": \"function\",\n      \"constant\": true\n    },\n    {\n      \"inputs\": [],\n      \"name\": \"getMoneyStored\",\n      \"outputs\": [\n        {\n          \"internalType\": \"uint256\",\n          \"name\": \"\",\n          \"type\": \"uint256\"\n        }\n      ],\n      \"stateMutability\": \"view\",\n      \"type\": \"function\",\n      \"constant\": true\n    }\n  ],\n  \"metadata\": \"{\\\"compiler\\\":{\\\"version\\\":\\\"0.7.0+commit.9e61f92b\\\"},\\\"language\\\":\\\"Solidity\\\",\\\"output\\\":{\\\"abi\\\":[{\\\"inputs\\\":[],\\\"name\\\":\\\"addMoney\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"payable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"decrementCounter\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getCount\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getMoneyStored\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"incrementCounter\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}],\\\"devdoc\\\":{\\\"kind\\\":\\\"dev\\\",\\\"methods\\\":{},\\\"version\\\":1},\\\"userdoc\\\":{\\\"kind\\\":\\\"user\\\",\\\"methods\\\":{},\\\"version\\\":1}},\\\"settings\\\":{\\\"compilationTarget\\\":{\\\"/home/rachit/Projects/demo/contracts/Counter.sol\\\":\\\"Counter\\\"},\\\"evmVersion\\\":\\\"istanbul\\\",\\\"libraries\\\":{},\\\"metadata\\\":{\\\"bytecodeHash\\\":\\\"ipfs\\\"},\\\"optimizer\\\":{\\\"enabled\\\":false,\\\"runs\\\":200},\\\"remappings\\\":[]},\\\"sources\\\":{\\\"/home/rachit/Projects/demo/contracts/Counter.sol\\\":{\\\"keccak256\\\":\\\"0x1e702f3f7d04fb3a62c3585e9f3a950b95db333308296d454afea31d90404f72\\\",\\\"urls\\\":[\\\"bzz-raw://ae2d4040ed723611feb8760df94f02f540576c1ab9178a0dc575448f4b5b0d3b\\\",\\\"dweb:/ipfs/QmWsM9Vzb6gjA8orRZuJJEaHRq3Km71mYFxhXbaVxE37km\\\"]}},\\\"version\\\":1}\",\n  \"bytecode\": \"0x608060405260008055600060015534801561001957600080fd5b5061015c806100296000396000f3fe60806040526004361061004a5760003560e01c80631b3f48421461004f5780635b34b96614610059578063a87d942c14610070578063e0a438fb1461009b578063f5c5ad83146100c6575b600080fd5b6100576100dd565b005b34801561006557600080fd5b5061006e6100ef565b005b34801561007c57600080fd5b50610085610101565b6040518082815260200191505060405180910390f35b3480156100a757600080fd5b506100b061010a565b6040518082815260200191505060405180910390f35b3480156100d257600080fd5b506100db610114565b005b34600160008282540192505081905550565b60016000808282540192505081905550565b60008054905090565b6000600154905090565b6001600080828254039250508190555056fea2646970667358221220b2c20047e73edf3b3020c78c599df5ecb6d4d6cd4e15836c6a117bffa0b85b3064736f6c63430007000033\",\n  \"deployedBytecode\": \"0x60806040526004361061004a5760003560e01c80631b3f48421461004f5780635b34b96614610059578063a87d942c14610070578063e0a438fb1461009b578063f5c5ad83146100c6575b600080fd5b6100576100dd565b005b34801561006557600080fd5b5061006e6100ef565b005b34801561007c57600080fd5b50610085610101565b6040518082815260200191505060405180910390f35b3480156100a757600080fd5b506100b061010a565b6040518082815260200191505060405180910390f35b3480156100d257600080fd5b506100db610114565b005b34600160008282540192505081905550565b60016000808282540192505081905550565b60008054905090565b6000600154905090565b6001600080828254039250508190555056fea2646970667358221220b2c20047e73edf3b3020c78c599df5ecb6d4d6cd4e15836c6a117bffa0b85b3064736f6c63430007000033\",\n  \"immutableReferences\": {},\n  \"sourceMap\": \"34:478:0:-:0;;;81:1;57:25;;110:1;88:23;;34:478;;;;;;;;;;;;;;;;\",\n  \"deployedSourceMap\": \"34:478:0:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;253:76;;;:::i;:::-;;118:62;;;;;;;;;;;;;:::i;:::-;;335:79;;;;;;;;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;420:90;;;;;;;;;;;;;:::i;:::-;;;;;;;;;;;;;;;;;;;185:62;;;;;;;;;;;;;:::i;:::-;;253:76;313:9;298:11;;:24;;;;;;;;;;;253:76::o;118:62::-;172:1;163:5;;:10;;;;;;;;;;;118:62::o;335:79::-;376:7;402:5;;395:12;;335:79;:::o;420:90::-;467:7;492:11;;485:18;;420:90;:::o;185:62::-;239:1;230:5;;:10;;;;;;;;;;;185:62::o\",\n  \"source\": \"pragma solidity >=0.4.22 <0.8.0;\\n\\ncontract Counter {\\n    uint256 private count = 0;\\n    uint256 moneyStored = 0;\\n\\n    function incrementCounter() public {\\n        count += 1;\\n    }\\n    function decrementCounter() public {\\n        count -= 1;\\n    }\\n\\n    function addMoney() payable public {\\n        moneyStored += msg.value;\\n    }\\n\\n    function getCount() public view returns (uint256) {\\n        return count;\\n    }\\n\\n    function getMoneyStored() public view returns (uint256){\\n        return moneyStored;\\n    }\\n}\",\n  \"sourcePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n  \"ast\": {\n    \"absolutePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n    \"exportedSymbols\": {\n      \"Counter\": [\n        49\n      ]\n    },\n    \"id\": 50,\n    \"license\": null,\n    \"nodeType\": \"SourceUnit\",\n    \"nodes\": [\n      {\n        \"id\": 1,\n        \"literals\": [\n          \"solidity\",\n          \">=\",\n          \"0.4\",\n          \".22\",\n          \"<\",\n          \"0.8\",\n          \".0\"\n        ],\n        \"nodeType\": \"PragmaDirective\",\n        \"src\": \"0:32:0\"\n      },\n      {\n        \"abstract\": false,\n        \"baseContracts\": [],\n        \"contractDependencies\": [],\n        \"contractKind\": \"contract\",\n        \"documentation\": null,\n        \"fullyImplemented\": true,\n        \"id\": 49,\n        \"linearizedBaseContracts\": [\n          49\n        ],\n        \"name\": \"Counter\",\n        \"nodeType\": \"ContractDefinition\",\n        \"nodes\": [\n          {\n            \"constant\": false,\n            \"id\": 4,\n            \"mutability\": \"mutable\",\n            \"name\": \"count\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"57:25:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 2,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"57:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 3,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"81:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"private\"\n          },\n          {\n            \"constant\": false,\n            \"id\": 7,\n            \"mutability\": \"mutable\",\n            \"name\": \"moneyStored\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"88:23:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 5,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"88:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 6,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"110:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"internal\"\n          },\n          {\n            \"body\": {\n              \"id\": 14,\n              \"nodeType\": \"Block\",\n              \"src\": \"153:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 12,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 10,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"163:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 11,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"172:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"163:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 13,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"163:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"5b34b966\",\n            \"id\": 15,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"incrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 8,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"143:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 9,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"153:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"118:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 22,\n              \"nodeType\": \"Block\",\n              \"src\": \"220:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 20,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 18,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"230:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"-=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 19,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"239:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"230:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 21,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"230:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"f5c5ad83\",\n            \"id\": 23,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"decrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 16,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"210:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 17,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"220:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"185:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 31,\n              \"nodeType\": \"Block\",\n              \"src\": \"288:41:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 29,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 26,\n                      \"name\": \"moneyStored\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 7,\n                      \"src\": \"298:11:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"expression\": {\n                        \"argumentTypes\": null,\n                        \"id\": 27,\n                        \"name\": \"msg\",\n                        \"nodeType\": \"Identifier\",\n                        \"overloadedDeclarations\": [],\n                        \"referencedDeclaration\": -15,\n                        \"src\": \"313:3:0\",\n                        \"typeDescriptions\": {\n                          \"typeIdentifier\": \"t_magic_message\",\n                          \"typeString\": \"msg\"\n                        }\n                      },\n                      \"id\": 28,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": false,\n                      \"lValueRequested\": false,\n                      \"memberName\": \"value\",\n                      \"nodeType\": \"MemberAccess\",\n                      \"referencedDeclaration\": null,\n                      \"src\": \"313:9:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"src\": \"298:24:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 30,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"298:24:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"1b3f4842\",\n            \"id\": 32,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"addMoney\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 24,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"270:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 25,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"288:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"253:76:0\",\n            \"stateMutability\": \"payable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 39,\n              \"nodeType\": \"Block\",\n              \"src\": \"385:29:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 37,\n                    \"name\": \"count\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 4,\n                    \"src\": \"402:5:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 36,\n                  \"id\": 38,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"395:12:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"a87d942c\",\n            \"id\": 40,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getCount\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 33,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"352:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 36,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 35,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 40,\n                  \"src\": \"376:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 34,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"376:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"375:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"335:79:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 47,\n              \"nodeType\": \"Block\",\n              \"src\": \"475:35:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 45,\n                    \"name\": \"moneyStored\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 7,\n                    \"src\": \"492:11:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 44,\n                  \"id\": 46,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"485:18:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"e0a438fb\",\n            \"id\": 48,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getMoneyStored\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 41,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"443:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 44,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 43,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 48,\n                  \"src\": \"467:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 42,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"467:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"466:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"420:90:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          }\n        ],\n        \"scope\": 50,\n        \"src\": \"34:478:0\"\n      }\n    ],\n    \"src\": \"0:512:0\"\n  },\n  \"legacyAST\": {\n    \"absolutePath\": \"/home/rachit/Projects/demo/contracts/Counter.sol\",\n    \"exportedSymbols\": {\n      \"Counter\": [\n        49\n      ]\n    },\n    \"id\": 50,\n    \"license\": null,\n    \"nodeType\": \"SourceUnit\",\n    \"nodes\": [\n      {\n        \"id\": 1,\n        \"literals\": [\n          \"solidity\",\n          \">=\",\n          \"0.4\",\n          \".22\",\n          \"<\",\n          \"0.8\",\n          \".0\"\n        ],\n        \"nodeType\": \"PragmaDirective\",\n        \"src\": \"0:32:0\"\n      },\n      {\n        \"abstract\": false,\n        \"baseContracts\": [],\n        \"contractDependencies\": [],\n        \"contractKind\": \"contract\",\n        \"documentation\": null,\n        \"fullyImplemented\": true,\n        \"id\": 49,\n        \"linearizedBaseContracts\": [\n          49\n        ],\n        \"name\": \"Counter\",\n        \"nodeType\": \"ContractDefinition\",\n        \"nodes\": [\n          {\n            \"constant\": false,\n            \"id\": 4,\n            \"mutability\": \"mutable\",\n            \"name\": \"count\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"57:25:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 2,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"57:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 3,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"81:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"private\"\n          },\n          {\n            \"constant\": false,\n            \"id\": 7,\n            \"mutability\": \"mutable\",\n            \"name\": \"moneyStored\",\n            \"nodeType\": \"VariableDeclaration\",\n            \"overrides\": null,\n            \"scope\": 49,\n            \"src\": \"88:23:0\",\n            \"stateVariable\": true,\n            \"storageLocation\": \"default\",\n            \"typeDescriptions\": {\n              \"typeIdentifier\": \"t_uint256\",\n              \"typeString\": \"uint256\"\n            },\n            \"typeName\": {\n              \"id\": 5,\n              \"name\": \"uint256\",\n              \"nodeType\": \"ElementaryTypeName\",\n              \"src\": \"88:7:0\",\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_uint256\",\n                \"typeString\": \"uint256\"\n              }\n            },\n            \"value\": {\n              \"argumentTypes\": null,\n              \"hexValue\": \"30\",\n              \"id\": 6,\n              \"isConstant\": false,\n              \"isLValue\": false,\n              \"isPure\": true,\n              \"kind\": \"number\",\n              \"lValueRequested\": false,\n              \"nodeType\": \"Literal\",\n              \"src\": \"110:1:0\",\n              \"subdenomination\": null,\n              \"typeDescriptions\": {\n                \"typeIdentifier\": \"t_rational_0_by_1\",\n                \"typeString\": \"int_const 0\"\n              },\n              \"value\": \"0\"\n            },\n            \"visibility\": \"internal\"\n          },\n          {\n            \"body\": {\n              \"id\": 14,\n              \"nodeType\": \"Block\",\n              \"src\": \"153:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 12,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 10,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"163:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 11,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"172:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"163:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 13,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"163:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"5b34b966\",\n            \"id\": 15,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"incrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 8,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"143:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 9,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"153:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"118:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 22,\n              \"nodeType\": \"Block\",\n              \"src\": \"220:27:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 20,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 18,\n                      \"name\": \"count\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 4,\n                      \"src\": \"230:5:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"-=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"hexValue\": \"31\",\n                      \"id\": 19,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": true,\n                      \"kind\": \"number\",\n                      \"lValueRequested\": false,\n                      \"nodeType\": \"Literal\",\n                      \"src\": \"239:1:0\",\n                      \"subdenomination\": null,\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_rational_1_by_1\",\n                        \"typeString\": \"int_const 1\"\n                      },\n                      \"value\": \"1\"\n                    },\n                    \"src\": \"230:10:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 21,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"230:10:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"f5c5ad83\",\n            \"id\": 23,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"decrementCounter\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 16,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"210:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 17,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"220:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"185:62:0\",\n            \"stateMutability\": \"nonpayable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 31,\n              \"nodeType\": \"Block\",\n              \"src\": \"288:41:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 29,\n                    \"isConstant\": false,\n                    \"isLValue\": false,\n                    \"isPure\": false,\n                    \"lValueRequested\": false,\n                    \"leftHandSide\": {\n                      \"argumentTypes\": null,\n                      \"id\": 26,\n                      \"name\": \"moneyStored\",\n                      \"nodeType\": \"Identifier\",\n                      \"overloadedDeclarations\": [],\n                      \"referencedDeclaration\": 7,\n                      \"src\": \"298:11:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"nodeType\": \"Assignment\",\n                    \"operator\": \"+=\",\n                    \"rightHandSide\": {\n                      \"argumentTypes\": null,\n                      \"expression\": {\n                        \"argumentTypes\": null,\n                        \"id\": 27,\n                        \"name\": \"msg\",\n                        \"nodeType\": \"Identifier\",\n                        \"overloadedDeclarations\": [],\n                        \"referencedDeclaration\": -15,\n                        \"src\": \"313:3:0\",\n                        \"typeDescriptions\": {\n                          \"typeIdentifier\": \"t_magic_message\",\n                          \"typeString\": \"msg\"\n                        }\n                      },\n                      \"id\": 28,\n                      \"isConstant\": false,\n                      \"isLValue\": false,\n                      \"isPure\": false,\n                      \"lValueRequested\": false,\n                      \"memberName\": \"value\",\n                      \"nodeType\": \"MemberAccess\",\n                      \"referencedDeclaration\": null,\n                      \"src\": \"313:9:0\",\n                      \"typeDescriptions\": {\n                        \"typeIdentifier\": \"t_uint256\",\n                        \"typeString\": \"uint256\"\n                      }\n                    },\n                    \"src\": \"298:24:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"id\": 30,\n                  \"nodeType\": \"ExpressionStatement\",\n                  \"src\": \"298:24:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"1b3f4842\",\n            \"id\": 32,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"addMoney\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 24,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"270:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 25,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"288:0:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"253:76:0\",\n            \"stateMutability\": \"payable\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 39,\n              \"nodeType\": \"Block\",\n              \"src\": \"385:29:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 37,\n                    \"name\": \"count\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 4,\n                    \"src\": \"402:5:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 36,\n                  \"id\": 38,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"395:12:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"a87d942c\",\n            \"id\": 40,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getCount\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 33,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"352:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 36,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 35,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 40,\n                  \"src\": \"376:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 34,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"376:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"375:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"335:79:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          },\n          {\n            \"body\": {\n              \"id\": 47,\n              \"nodeType\": \"Block\",\n              \"src\": \"475:35:0\",\n              \"statements\": [\n                {\n                  \"expression\": {\n                    \"argumentTypes\": null,\n                    \"id\": 45,\n                    \"name\": \"moneyStored\",\n                    \"nodeType\": \"Identifier\",\n                    \"overloadedDeclarations\": [],\n                    \"referencedDeclaration\": 7,\n                    \"src\": \"492:11:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"functionReturnParameters\": 44,\n                  \"id\": 46,\n                  \"nodeType\": \"Return\",\n                  \"src\": \"485:18:0\"\n                }\n              ]\n            },\n            \"documentation\": null,\n            \"functionSelector\": \"e0a438fb\",\n            \"id\": 48,\n            \"implemented\": true,\n            \"kind\": \"function\",\n            \"modifiers\": [],\n            \"name\": \"getMoneyStored\",\n            \"nodeType\": \"FunctionDefinition\",\n            \"overrides\": null,\n            \"parameters\": {\n              \"id\": 41,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [],\n              \"src\": \"443:2:0\"\n            },\n            \"returnParameters\": {\n              \"id\": 44,\n              \"nodeType\": \"ParameterList\",\n              \"parameters\": [\n                {\n                  \"constant\": false,\n                  \"id\": 43,\n                  \"mutability\": \"mutable\",\n                  \"name\": \"\",\n                  \"nodeType\": \"VariableDeclaration\",\n                  \"overrides\": null,\n                  \"scope\": 48,\n                  \"src\": \"467:7:0\",\n                  \"stateVariable\": false,\n                  \"storageLocation\": \"default\",\n                  \"typeDescriptions\": {\n                    \"typeIdentifier\": \"t_uint256\",\n                    \"typeString\": \"uint256\"\n                  },\n                  \"typeName\": {\n                    \"id\": 42,\n                    \"name\": \"uint256\",\n                    \"nodeType\": \"ElementaryTypeName\",\n                    \"src\": \"467:7:0\",\n                    \"typeDescriptions\": {\n                      \"typeIdentifier\": \"t_uint256\",\n                      \"typeString\": \"uint256\"\n                    }\n                  },\n                  \"value\": null,\n                  \"visibility\": \"internal\"\n                }\n              ],\n              \"src\": \"466:9:0\"\n            },\n            \"scope\": 49,\n            \"src\": \"420:90:0\",\n            \"stateMutability\": \"view\",\n            \"virtual\": false,\n            \"visibility\": \"public\"\n          }\n        ],\n        \"scope\": 50,\n        \"src\": \"34:478:0\"\n      }\n    ],\n    \"src\": \"0:512:0\"\n  },\n  \"compiler\": {\n    \"name\": \"solc\",\n    \"version\": \"0.7.0+commit.9e61f92b.Emscripten.clang\"\n  },\n  \"networks\": {\n    \"2\": {\n      \"events\": {},\n      \"links\": {},\n      \"address\": \"0x9e6B79B0c4724DE42147B927e734d80a76c36BF9\",\n      \"transactionHash\": \"0x57ccda05dc9e4266d9bc41dfe941d23704bc8ef43bd38db8bbc5aea9f8020f42\"\n    }\n  },\n  \"schemaVersion\": \"3.2.1\",\n  \"updatedAt\": \"2020-11-13T15:32:39.949Z\",\n  \"networkType\": \"ethereum\",\n  \"devdoc\": {\n    \"kind\": \"dev\",\n    \"methods\": {},\n    \"version\": 1\n  },\n  \"userdoc\": {\n    \"kind\": \"user\",\n    \"methods\": {},\n    \"version\": 1\n  }\n}";
   contract = JSON.parse(contract);
   const abi = contract.abi;
   const contractAddress = contract.networks['2'].address;
-
-  const contractInstance = _hmy.default.contracts.createContract(abi, contractAddress);
-
+  const contractInstance = hmy.contracts.createContract(abi, contractAddress);
   return contractInstance;
 };
-
-var _default = initializeContract;
-exports.default = _default;
-},{"./hmy":"hmy.js","fs":"../node_modules/parcel-bundler/src/builtins/_empty.js"}],"walletStore.js":[function(require,module,exports) {
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.MathWallet = void 0;
-
-const {
-  fromBech32
-} = require('@harmony-js/crypto');
-
-const defaults = {};
-
-class MathWallet {
-  constructor(network, client) {
-    console.log(network, client);
-    this.isMathWallet = false;
-    setTimeout(async () => {
-      this.initWallet();
-    }, 2000);
-  }
-
-  signIn() {
-    if (!this.mathwallet) {
-      this.initWallet();
-    }
-
-    return this.mathwallet.getAccount().then(account => {
-      this.sessionType = `mathwallet`;
-      this.address = account.address;
-      this.isAuthorized = true;
-      console.log(account.address, this.address);
-      this.setBase16Address();
-      return Promise.resolve();
-    });
-  }
-
-  signOut() {
-    if (this.sessionType === 'mathwallet' && this.isMathWallet) {
-      return this.mathwallet.forgetIdentity().then(() => {
-        this.sessionType = '';
-        this.address = null;
-        this.base16Address = null;
-        this.isAuthorized = false;
-        return Promise.resolve();
-      }).catch(err => {
-        console.error(err.message);
-      });
-    }
-  }
-
-  initWallet() {
-    this.isMathWallet = window.harmony && window.harmony.isMathWallet;
-    this.mathwallet = window.harmony;
-    this.signIn();
-  }
-
-  setBase16Address() {
-    this.base16Address = fromBech32(this.address);
-    console.log(this.base16Address);
-  }
-
-  async signTransaction(txn) {
-    console.log(this.isMathWallet);
-
-    if (this.sessionType === 'mathwallet' && this.isMathWallet) {
-      console.log(this.mathwallet);
-      return this.mathwallet.signTransaction(txn);
-    }
-  }
-
-  attachToContract(contract) {
-    contract.wallet.createAccount();
-
-    if (contract.wallet.defaultSigner === '') {
-      contract.wallet.defaultSigner = this.address;
-    }
-
-    contract.wallet.signTransaction = async tx => {
-      try {
-        tx.from = this.address;
-        const signTx = await this.signTransaction(tx);
-        console.log(signTx);
-        return signTx;
-      } catch (err) {
-        if (err.type === 'locked') {
-          alert('Your MathWallet is locked! Please unlock it and try again!');
-          return Promise.reject();
-        } else if (err.type === 'networkError') {
-          await this.signIn();
-          this.initWallet();
-
-          try {
-            tx.from = this.address;
-            const signTx = await this.signTransaction(tx);
-            return signTx;
-          } catch (error) {
-            return Promise.reject(error);
-          }
-        } else {
-          alert('An error occurred - please check that you have MathWallet installed and that it is properly configured!');
-          return Promise.reject();
-        }
-      }
-    };
-
-    return contract;
-  }
-
-}
-
-exports.MathWallet = MathWallet;
-},{"@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js"}],"init.js":[function(require,module,exports) {
-"use strict";
-
-var _contract = _interopRequireDefault(require("./contract"));
-
-var _walletStore = require("./walletStore");
-
-var _hmy = _interopRequireDefault(require("./hmy"));
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 let but = document.getElementById("inputtButton");
 but.addEventListener("click", initWallet);
 
 async function initWallet() {
-  const wallet = new _walletStore.MathWallet('testnet', _hmy.default);
+  const wallet = new _walletStore.MathWallet('testnet', hmy);
   await wallet.signIn();
-  const unattachedContract = await (0, _contract.default)();
-  console.log(contract);
+  console.log("diasomndoasi");
+  const unattachedContract = await initializeContract();
   const contract = await wallet.attachToContract(unattachedContract);
   const result = await contract.methods.getCount().call();
   console.log(result.toString());
+  const one = new BN('1');
+  let options = {
+    gasPrice: 1000000000,
+    gasLimit: 2100000,
+    value: toWei(one, hmy.utils.Units.one)
+  };
+  const increment = await contract.methods.addMoney().send(options);
 }
-},{"./contract":"contract.js","./walletStore":"walletStore.js","./hmy":"hmy.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
+},{"fs":"../node_modules/parcel-bundler/src/builtins/_empty.js","./walletStore":"walletStore.js","@harmony-js/core":"../node_modules/@harmony-js/core/dist/index.js","@harmony-js/utils":"../node_modules/@harmony-js/utils/dist/index.js","@harmony-js/crypto":"../node_modules/@harmony-js/crypto/dist/index.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
 var global = arguments[3];
 var OVERLAY_ID = '__parcel__error__overlay__';
 var OldModule = module.bundle.Module;
@@ -80412,7 +80396,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "42787" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "41343" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
