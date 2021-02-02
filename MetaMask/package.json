@@ -1,0 +1,23 @@
+{
+  "name": "metamask",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "server": "http-server",
+    "dev": "parcel src/index.html "
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@metamask/detect-provider": "^1.2.0",
+    "eslint": "^7.19.0",
+    "eslint-config-prettier": "^7.2.0",
+    "eslint-plugin-import": "^2.22.1",
+    "http-server": "^0.12.3",
+    "parcel-bundler": "^1.12.4",
+    "prettier": "^2.2.1",
+    "web3": "^1.3.3"
+  }
+}
